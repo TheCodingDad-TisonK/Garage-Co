@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "co-editor": {
+      "command": "node",
+      "args": ["node_modules/co-engine/editor/mcp.js"]
+    }
+  }
+}
