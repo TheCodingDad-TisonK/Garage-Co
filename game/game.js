@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.5.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.5.2', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -28,7 +28,8 @@
   // the hook bus: a game or a pack registers a function under a name, the engine calls every one in order, each inside its own try
   var HOOKS = {};
   function hook(name, fn) { (HOOKS[name] = HOOKS[name] || []).push(fn); return fn; }
-  function runHooks(name, a, b, c) { var list = HOOKS[name]; if (!list) return; for (var i = 0; i < list.length; i++) { try { list[i](a, b, c); } catch (e) { if (typeof console !== 'undefined') console.error('hook ' + name + ': ' + (e && e.message || e)); } } }
+  // every argument reaches every hook (the lighting hook takes four: day, dawn, overcast, power; until 0.5.1 only three got through, so power was always undefined)
+  function runHooks(name) { var list = HOOKS[name]; if (!list) return; var args = Array.prototype.slice.call(arguments, 1); for (var i = 0; i < list.length; i++) { try { list[i].apply(null, args); } catch (e) { if (typeof console !== 'undefined') console.error('hook ' + name + ': ' + (e && e.message || e)); } } }
   // CO.setup(cfg): the game's first part calls this once, before any part uses the scene. It reads the settings and the save slot
   // (40-state), makes the renderer, the scene, the camera, the lights and the palette (10-three), then runs the 'setup' hooks.
   // cfg.game is the game's hook object (CO.game). Function declarations are hoisted, so the parts that define the setup steps come later.
@@ -1698,7 +1699,7 @@
   // draws a .dc-crosshair itself), shown while the player plays and hidden behind a panel, the menu or the scene camera
   var crossEl = null, crossShown = null;
   function crosshair() {
-    if (crossEl === null) { crossEl = document.querySelector('.dc-crosshair') ? false : null; if (crossEl === null) { var host = $('dc-hud') || document.body, d = document.createElement('div'); d.id = 'h-cross'; d.style.cssText = 'position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,0.9);box-shadow:0 0 0 1.5px rgba(0,0,0,0.6),0 0 6px rgba(0,0,0,0.5);pointer-events:none;z-index:5'; host.appendChild(d); crossEl = d; } }
+    if (crossEl === null) { crossEl = document.querySelector('[class*="crosshair"], #crosshair') ? false : null;   /* Depot's .dc-crosshair, Grow's .g3-crosshair: a page with its own keeps it */ if (crossEl === null) { var host = $('dc-hud') || document.body, d = document.createElement('div'); d.id = 'h-cross'; d.style.cssText = 'position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,0.9);box-shadow:0 0 0 1.5px rgba(0,0,0,0.6),0 0 6px rgba(0,0,0,0.5);pointer-events:none;z-index:5'; host.appendChild(d); crossEl = d; } }
     if (!crossEl) return; var want = !!(ui.started && !ui.blocked() && !(photo.on && CO.game.photo !== false) && !(CO.game && CO.game.crosshair === false)); if (want !== crossShown) { crossShown = want; crossEl.style.display = want ? '' : 'none'; }
   }
   function updateHud(dt) {
@@ -2614,12 +2615,14 @@
       "bench": { x: -3.8, z: 1.8, rot: 1, h: 0 },
       "desk": { x: -2.35, z: -3.3, rot: 0, h: 0 },
       "drum": { x: 4.35, z: 0.75, rot: 0, h: 0 },
-      "jack": { x: 1.65, z: 0.3, rot: 1, h: 0 },
+      "jack": { x: -0.1, z: -0.95, rot: 2, h: 0 },
+      "noticeBoard": { x: -493.75, z: -533.45, rot: 1, h: 0 },
       "rack": { x: 4.5, z: -1.55, rot: 3, h: 0 },
-      "stands": { x: 0.65, z: -2.8, rot: 0, h: 0 },
-      "toolWall": { x: 0.7, z: -3.83, rot: 0, h: 0 },
+      "stands": { x: 1.55, z: -2.9, rot: 0, h: 0 },
+      "toolWall": { x: 1.6, z: -3.83, rot: 0, h: 0 },
     },
     placed: [
+      { id: "cp-mv1ejge3-1", type: "pkBin", x: 3.8, z: -3.25, rot: 0, h: 0 },
     ]
   });
   // the pack's state in the save: which gates and barriers are open, which levers are on
