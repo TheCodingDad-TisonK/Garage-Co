@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.5.2', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.6.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -630,7 +630,7 @@
   function buildProp(id) {
     removePropInst(id);
     var def = propDef(id); if (!def) return null; if (!propAllowed(id)) return null;
-    var P = propPlacement(id), g = new THREE.Group(); g.userData.propId = id; g.position.set(P.x, typeof def.y === 'number' ? def.y : propGroundY(P.x, P.z), P.z); g.rotation.y = P.rot * Math.PI / 2;
+    var P = propPlacement(id), g = new THREE.Group(); g.userData.propId = id; g.position.set(P.x, (typeof def.y === 'number' ? def.y : propGroundY(P.x, P.z)) + (def.ownHeight ? 0 : (P.h || 0)), P.z);   /* the height a prop was raised to (the inspector, PageUp, Drop) lifts the whole prop; a def that places its own parts by P.h says ownHeight (0.6.0; before, h was stored and never shown) */ g.rotation.y = P.rot * Math.PI / 2;
     var ctx = propCtx(g, id), inst = { id: id, g: g, P: P, ctx: ctx, def: def };
     if (!P.hidden) propInst[id] = inst;   // a removed prop is not on the list: nothing then counts a hidden machine as standing
     if (!P.hidden) {
@@ -1886,8 +1886,9 @@
   }
   // ── Looking at things ─────────────────────────────────────────────
   function updateFocus() {
+    if (CO.game && CO.game.focusOff && CO.game.focusOff()) return;   // the game keeps its own focus (Grow Co): leave it alone; clearing it here wiped the shop's aim every frame, so E and clicks found nothing
     focus = null; focusText = '';
-    if (!ui.started || ui.blocked() || photo.on || (CO.game && CO.game.focusOff && CO.game.focusOff())) return;
+    if (!ui.started || ui.blocked() || photo.on) return;
     ray.setFromCamera(centre, camera);
     if (edit.on && !(CO.game && CO.game.editMode === false)) {
       if (edit.grabbed) { if (edit.snapText) { focus = { prompt: function () { return edit.snapText; }, use: function () {} }; focusText = edit.snapText; } return; }
@@ -2353,8 +2354,10 @@
     return K;
   }
   var ORIG_BUILD = {};
+  // code the editor runs (a build function, a whole definition, a pack) runs inside the engine's own scope by a direct eval here, so it sees every name a part of the game sees (0.6.0; before, only the kit's names)
+  function closureRun(src) { return eval(src); }
   function editorCompile(code, what) {
-    var fn; try { fn = new Function('K', 'with (K) { return (' + code + '\n); }')(editorKit()); } catch (e) { return { error: 'the ' + what + ' code does not parse: ' + e.message }; }
+    var fn; try { fn = closureRun('(' + code + '\n)'); } catch (e) { return { error: 'the ' + what + ' code does not parse: ' + e.message }; }
     if (typeof fn !== 'function') return { error: 'the ' + what + ' code must be a function expression: function (c, P, inst) { ... }' };
     return { fn: fn };
   }
@@ -2379,7 +2382,7 @@
   // a whole definition, run live: defProp(id, { ... }). A placed one (x, z, not extra) builds at once; an extra one joins the assets
   function editorDefine(code) {
     var n0 = PROP_ORDER.length, known = PROP_ORDER.slice();
-    try { new Function('K', 'with (K) { ' + code + '\n }')(editorKit()); } catch (e) { return { ok: false, error: 'the definition does not run: ' + e.message }; }
+    try { closureRun(code + '\n'); } catch (e) { return { ok: false, error: 'the definition does not run: ' + e.message }; }
     var added = PROP_ORDER.slice(n0); if (!added.length) return { ok: false, error: 'the code ran but defined no prop: it should call defProp(id, { ... })' };
     PROP_ORDER.length = n0; var ids = []; added.forEach(function (k) { if (ids.indexOf(k) < 0) ids.push(k); if (PROP_ORDER.indexOf(k) < 0) PROP_ORDER.push(k); });   /* a redefinition keeps its place in the order; a pack adds many */
     var id = ids[ids.length - 1], def = PROPS[id], built = 0, redefined = [];
@@ -2475,6 +2478,7 @@
     ui: uiData, uiSet: function (data) { var prev = uiData(), next = JSON.parse(JSON.stringify(data || {})); CO.ui(next); if (ui.panelOpen) renderPanel(); histPush('UI', function () { CO.ui(prev); }, function () { CO.ui(next); }); return uiData(); },
     tables: tablesList, tableSet: tableSet, tablesCode: tablesCode, uiCode: uiCode, uiOpen: function (kind) { openPanel(kind); return !!UI.panels[kind]; }, uiEval: uiEval,
     packCode: function (types) { var ids = (types && types.length ? types : PROP_ORDER.filter(function (id) { return !/^pk[A-Z]/.test(id); })).filter(function (id) { return PROPS[id] && PROPS[id].build; }); var lines = ['//@ a pack made in the Co Engine editor from ' + (CO.game && CO.game.handle || 'a game') + '\'s props. A prop that calls the game\'s own functions needs them in the game it goes to.']; ids.forEach(function (id) { var d = PROPS[id], f = {}; ['label', 'cat', 'wall', 'fixed', 'price', 'desc', 'lvl', 'ico', 'noBlob'].forEach(function (k) { if (d[k] !== undefined) f[k] = d[k]; }); f.extra = true; f.shop = false; var body = JSON.stringify(f); lines.push('  defProp(' + JSON.stringify(id) + ', Object.assign(' + body + ', { build: ' + d.build.toString() + (d.after ? ', after: ' + d.after.toString() : '') + ' }));'); }); return { ids: ids, code: lines.join('\n') + '\n' }; },
+    run: function (code) { var r = closureRun(String(code)); try { return r === undefined ? null : JSON.parse(JSON.stringify(r)); } catch (e) { return String(r); } },
     model: modelOf, modelPreview: modelPreview, modelStart: modelStart, modelPick: modelPick, modelMirror: modelMirror, modelCode: modelCode,
     physics: physicsState, bodyAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var B = body(o, opt || {}); return { ok: true, id: B.id, size: [B.hx * 2, B.hy * 2, B.hz * 2] }; }, bodyRemove: function (id) { var o = eobj(id); return !!o && removeBody(o); }, impulse: function (id, vx, vy, vz) { var o = eobj(id); return !!o && impulse(o, vx, vy, vz); },
     springAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var S2 = spring(o, opt || {}); return { ok: true, anchor: S2.anchor, k: S2.k }; }, springRemove: function (id) { var o = eobj(id); return !!o && unspring(o); },

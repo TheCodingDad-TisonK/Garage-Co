@@ -18,7 +18,7 @@
     "installer": "npm run check && npm run brand && node node_modules/co-engine/tools/verify-icon.js && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
-    "co-engine": "github:TheCodingDad-TisonK/Co-Engine#v0.5.2"
+    "co-engine": "github:TheCodingDad-TisonK/Co-Engine#v0.6.0"
   },
   "devDependencies": {
     "electron": "^33.2.1",
