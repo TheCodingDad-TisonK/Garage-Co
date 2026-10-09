@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Garage Co.</title>
+<style>
+  :root { --bg: #0b0f14; --panel: #121a24; --line: rgba(255,255,255,0.08); --text: #eef1f5; --muted: #a0acb8; --amber: #f5b53d; --green: #5fd38d; --red: #ff6b5e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 Bahnschrift, "Segoe UI", Arial, sans-serif; overflow: hidden; }
+  #co-canvas { display: block; width: 100vw; height: 100vh; }
+  .dc-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .dc-overlay.dim { background: rgba(5, 8, 12, 0.72); }
+  #dc-start .card, .dc-menu-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px; min-width: 320px; max-width: 640px; }
+  #dc-start h1 { margin: 0 0 4px; font-size: 30px; } #dc-start h1 span { color: var(--amber); }
+  .dc-disclaimer { margin: 10px 0 14px; padding: 8px 10px; border: 1px solid rgba(255,107,94,0.45); border-radius: 8px; color: var(--muted); font-size: 12px; }
+  .dc-disclaimer b { color: var(--text); }
+  #dc-start-stats span { display: inline-block; margin: 0 8px 6px 0; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .dc-btn, .dc-menu-btns button, .dc-menu-row button, #dc-panel-tabs button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.06); color: var(--text); font: inherit; cursor: pointer; }
+  .dc-btn.primary, .dc-menu-btns button.primary, .dc-menu-row button.primary, #dc-panel-tabs button.on { background: rgba(245,181,61,0.14); border-color: rgba(245,181,61,0.45); color: var(--amber); }
+  .dc-btn.small { padding: 4px 10px; }
+  .dc-menu-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .dc-support { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
+  .dc-support a { color: var(--text); text-decoration: none; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.05); }
+  #dc-hud { position: fixed; inset: 0; pointer-events: none; }
+  #dc-hud .top { position: absolute; top: 10px; left: 12px; display: flex; gap: 10px; }
+  #dc-hud .top span { background: rgba(5,8,12,0.6); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  #h-prompt { position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); background: rgba(5,8,12,0.7); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+  #h-prompt b { color: var(--amber); margin-right: 8px; }
+  #h-toasts { position: absolute; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+  #h-toasts div { background: rgba(5,8,12,0.75); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  #h-toasts .bad { border-color: rgba(255,107,94,0.5); } #h-toasts .good { border-color: rgba(95,211,141,0.5); } #h-toasts .rare { border-color: rgba(245,181,61,0.6); }
+  #h-feed { position: absolute; left: 12px; bottom: 14px; color: var(--muted); } #h-feed .t { color: var(--amber); margin-right: 6px; }
+  #h-fps, #h-devlink, #h-edit { position: absolute; right: 14px; top: 10px; background: rgba(5,8,12,0.6); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: 12px; }
+  #h-devlink { top: 40px; color: var(--green); } #h-edit { top: 70px; color: var(--amber); }
+  #h-card { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; min-width: 260px; }
+  #dc-panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 92vw); max-height: 86vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+  #dc-panel header { display: flex; align-items: center; gap: 10px; } #dc-panel header h2 { flex: 1; margin: 0; font-size: 18px; }
+  .dc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .dc-card { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; } .dc-card .body { flex: 1; } .dc-card small { display: block; color: var(--muted); } .dc-card .price { color: var(--amber); }
+  .dc-form label { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); gap: 12px; }
+  .dc-ta { width: 100%; min-height: 120px; background: rgba(0,0,0,0.3); color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: 12px Consolas, monospace; }
+  .dc-sub { color: var(--muted); }
+  table.dc-table { width: 100%; border-collapse: collapse; } table.dc-table td, table.dc-table th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); } table.dc-table th { color: var(--muted); font-weight: normal; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="co-canvas"></canvas>
+<div id="dc-start" class="dc-overlay dim"><div class="card">
+  <h1>Garage <span>Co.</span></h1><div class="dc-sub">First-person car workshop</div>
+  <div class="dc-disclaimer"><b>NOT a Farming Simulator product.</b> This game has nothing to do with Farming Simulator, GIANTS Software, or any Farming Simulator mod. It is a separate, standalone hobby project by TheCodingDad.</div>
+  <p id="dc-start-stats"></p><p id="dc-start-note" class="dc-sub"></p>
+  <div class="dc-menu-row"><button id="dc-start-btn" class="dc-btn primary">Open the garage</button></div>
+  <div class="dc-support">Support the work: <a href="https://www.patreon.com/cw/thecodingdad" target="_blank" rel="noopener">Support on Patreon</a><a href="https://www.paypal.com/paypalme/TheCodingDad" target="_blank" rel="noopener">Support via PayPal</a></div>
+</div></div>
+<div id="dc-hud" hidden>
+  <div class="top"><span id="h-day">Day 1</span><span id="h-clock">08:00</span><span id="h-cash">$0</span><span id="h-level">Level 1</span><span id="h-jobs">0 jobs</span><span id="h-rep">rep 10</span></div>
+  <div id="h-prompt" hidden></div><div id="h-toasts"></div><div id="h-feed"></div>
+  <div id="h-fps" hidden></div><div id="h-devlink" hidden></div><div id="h-edit" hidden>BUILD MODE</div>
+  <div id="h-card" hidden></div>
+</div>
+<div id="dc-panel" hidden><header><h2 id="dc-panel-title"></h2><div id="dc-panel-tabs"></div><button id="dc-panel-close" class="dc-btn">✕</button></header><div id="dc-panel-body"></div></div>
+<div id="dc-menu" class="dc-overlay dim" hidden>
+  <div class="dc-menu-card">
+    <h2>Paused</h2><p class="dc-sub" id="dc-menu-sub"></p>
+    <div class="dc-menu-btns">
+      <button class="primary" data-menu="resume">Resume</button><button data-menu="settings">Settings</button><button data-menu="guide">How to play</button><button data-menu="edit">Build mode</button><button data-menu="stats">The books</button><button data-menu="saves">Save file</button><button data-menu="devlink" id="dc-m-devlink">Link the editor</button><button data-menu="reset">⟲ Reset this save</button><button data-menu="quit">Quit to the start</button>
+    </div>
+    <div id="dc-menu-body" hidden></div>
+  </div>
+</div>
+<script src="game/version.js"></script>
+<script src="vendor/three/three.min.js"></script>
+<script src="game/game.js"></script>
+</body>
+</html>

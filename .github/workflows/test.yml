@@ -1,0 +1,26 @@
+name: Tests
+
+# Every push to main and every pull request: the repo checks (the parts build the game file exactly, the version
+# stamp, the lint gate, syntax), then the game's test suite in a hidden Electron window with software WebGL.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+        env:
+          CI: 'true'

@@ -1,0 +1,11 @@
+{
+  "name": "Garage Co",
+  "title": "Garage Co.",
+  "out": "game/game.js",
+  "src": "src",
+  "engine": "node_modules/co-engine/engine",
+  "page": "index.html",
+  "versionGlobal": "GARAGE_VERSION",
+  "background": "#0b0f14",
+  "pictures": "Garage Co"
+}
