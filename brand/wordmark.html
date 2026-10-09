@@ -1,0 +1,70 @@
+<!-- Horizontal lockup: the spanner badge beside the GARAGE CO. wordmark. ?w= sets the width, ?dark=0 for a light background.
+     Rendered by node_modules/co-engine/tools/render-brand.js. -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #stage { display: inline-flex; align-items: center; gap: 0; }   /* shrink-wraps so the capture has no dead space */
+  .mark { position: relative; flex: none; }
+  .badge { position: absolute; inset: 0; border-radius: 22.3%; background: radial-gradient(120% 110% at 28% 18%, #2d3139 0%, #1b1f26 42%, #0f1216 74%, #080a0d 100%); }
+  .rim { position: absolute; inset: 0; border-radius: 22.3%; box-shadow: inset 0 0 0 2px rgba(245,181,61,.40); }
+  .art { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .art svg { display: block; width: 100%; height: 100%; }
+  .type { display: flex; flex-direction: column; justify-content: center; font-family: "Segoe UI", system-ui, sans-serif; }
+  .type .name { font-weight: 800; letter-spacing: -0.5px; line-height: .95; color: var(--ink); }
+  .type .name em { font-style: normal; color: #f5b53d; }
+  .type .sub { font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--sub); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="mark" id="mark">
+    <div class="badge"></div>
+    <div class="art" id="art"></div>
+    <div class="rim"></div>
+  </div>
+  <div class="type" id="type">
+    <div class="name" id="name">Garage <em>Co.</em></div>
+    <div class="sub" id="sub">by TheCodingDad</div>
+  </div>
+</div>
+<script>
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 1200, dark = q.get('dark') !== '0';
+  var u = W / 1200;   // everything is drawn against a 1200 px reference and scaled
+  document.documentElement.style.setProperty('--ink', dark ? '#f2f4f7' : '#12161b');
+  document.documentElement.style.setProperty('--sub', dark ? '#9aa4b0' : '#5d6873');
+  var badge = Math.round(300 * u);
+  var mark = document.getElementById('mark');
+  mark.style.width = badge + 'px'; mark.style.height = badge + 'px';
+  var art = document.getElementById('art'); var as = Math.round(badge * 0.74);
+  art.style.width = as + 'px'; art.style.height = as + 'px';
+  art.innerHTML = '<svg viewBox="0 0 100 100">' +
+    '<circle cx="50" cy="50" r="36" fill="#1c2128" stroke="#3b434d" stroke-width="7"/>' +
+    '<circle cx="50" cy="50" r="36" fill="none" stroke="#2a313a" stroke-width="3" stroke-dasharray="4 5"/>' +
+    '<circle cx="50" cy="50" r="13" fill="#2b323b" stroke="#4a535e" stroke-width="2"/>' +
+    '<circle cx="50" cy="50" r="4" fill="#6a7482"/>' +
+    '<g transform="rotate(-45 50 50)">' +
+    '<rect x="43" y="28" width="14" height="52" rx="7" fill="#f5b53d" stroke="#b07d1c" stroke-width="2"/>' +
+    '<circle cx="50" cy="24" r="17" fill="#f5b53d" stroke="#b07d1c" stroke-width="2"/>' +
+    '<rect x="43.5" y="6" width="13" height="16" fill="#14181d"/>' +
+    '<circle cx="50" cy="84" r="13" fill="#f5b53d" stroke="#b07d1c" stroke-width="2"/>' +
+    '<circle cx="50" cy="84" r="5.5" fill="#14181d"/>' +
+    '<rect x="47" y="36" width="3" height="36" rx="1.5" fill="#ffd57a" opacity=".7"/>' +
+    '</g></svg>';
+  var type = document.getElementById('type');
+  type.style.marginLeft = Math.round(46 * u) + 'px';
+  document.getElementById('name').style.fontSize = Math.round(150 * u) + 'px';
+  var sub = document.getElementById('sub');
+  sub.style.fontSize = Math.round(37 * u) + 'px';
+  sub.style.marginTop = Math.round(14 * u) + 'px';
+  // the canvas is trimmed to whatever the lockup actually measures
+  requestAnimationFrame(function () {
+    var r = document.getElementById('stage').getBoundingClientRect();
+    document.title = Math.ceil(r.width) + 'x' + Math.ceil(r.height);
+  });
+</script>
+</body>
+</html>
