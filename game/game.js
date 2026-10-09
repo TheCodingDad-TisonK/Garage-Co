@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.2.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.2.1', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -1415,6 +1415,79 @@
     return false;
   }
   function vehicleCamera(v, look, eye, back) { var y = floorY(v.x, v.z) + (eye || 1.78), b = back === undefined ? 0.45 : back; camera.position.set(v.x - Math.sin(v.yaw) * b, y, v.z - Math.cos(v.yaw) * b); camera.rotation.set(look ? look.pitch : 0, v.yaw + Math.PI + (look ? look.yaw : 0), 0, 'YXZ'); }
+  // ── Clips ─────────────────────────────────────────────────────────
+  // A clip: { duration, loop, tracks: [{ path, keys: [[t, value, ease]] }], events: [[t, name]] }. A path names a node and a field:
+  // 'rotation.x' on the object itself, 'child.2.position.y' the third child, 'name.lamp.rotation.z' a named descendant, and on a
+  // person 'leg.0', 'knee.1', 'arm.0', 'elbow.1', 'torso', 'head' (the rig's parts). Values are numbers; ease is 'linear', 'smooth',
+  // 'in', 'out' or 'step'. Times are seconds.
+  var CLIPS = {}, CLIP_ORDER = [], playing = [];
+  CO.clip = function (name, clip) { if (!name) return CLIPS; if (clip === null) { delete CLIPS[name]; CLIP_ORDER.splice(CLIP_ORDER.indexOf(name), 1); return null; } clip = JSON.parse(JSON.stringify(clip || {})); clip.duration = clip.duration || clipLength(clip); if (!clip.tracks) clip.tracks = []; if (!CLIPS[name]) CLIP_ORDER.push(name); CLIPS[name] = clip; return clip; };
+  function clipLength(c) { var d = 0; (c.tracks || []).forEach(function (t) { (t.keys || []).forEach(function (k) { d = Math.max(d, k[0]); }); }); (c.events || []).forEach(function (e) { d = Math.max(d, e[0]); }); return d || 1; }
+  function easeV(k, f) { if (k === 'step') return 0; if (k === 'in') return f * f; if (k === 'out') return 1 - (1 - f) * (1 - f); if (k === 'linear') return f; return f * f * (3 - 2 * f); }
+  function trackValue(keys, t) {
+    if (!keys || !keys.length) return undefined; if (t <= keys[0][0]) return keys[0][1]; var last = keys[keys.length - 1]; if (t >= last[0]) return last[1];
+    for (var i = 0; i < keys.length - 1; i++) { var a = keys[i], b = keys[i + 1]; if (t >= a[0] && t <= b[0]) { var f = b[0] === a[0] ? 1 : (t - a[0]) / (b[0] - a[0]); return a[1] + (b[1] - a[1]) * easeV(b[2] || 'smooth', f); } }
+    return last[1];
+  }
+  // the node and field a path names, on an object (a person's parts come from the rig's userData)
+  function clipTarget(obj, path) {
+    var p = String(path).split('.'), node = obj, u = obj.userData || {}, i = 0;
+    if (p[0] === 'child') { node = obj.children[+p[1]]; i = 2; }
+    else if (p[0] === 'name') { node = obj.getObjectByName(p[1]); i = 2; }
+    else if (p[0] === 'leg' && u.legs) { node = u.legs[+p[1]]; i = 2; }
+    else if (p[0] === 'knee' && u.legs) { node = u.legs[+p[1]] && u.legs[+p[1]].userData.knee; i = 2; }
+    else if (p[0] === 'arm' && u.arms) { node = u.arms[+p[1]]; i = 2; }
+    else if (p[0] === 'elbow' && u.arms) { node = u.arms[+p[1]] && u.arms[+p[1]].userData.elbow; i = 2; }
+    else if (p[0] === 'torso' && u.torso) { node = u.torso; i = 1; }
+    else if (p[0] === 'head' && u.head) { node = u.head; i = 1; }
+    if (!node) return null; var prop = p[i], axis = p[i + 1];
+    if (prop === 'visible' || prop === 'intensity' || prop === 'opacity') return { node: node, set: function (v) { if (prop === 'opacity' && node.material) { node.material.opacity = v; node.material.transparent = v < 1; } else node[prop] = prop === 'visible' ? v >= 0.5 : v; }, get: function () { return prop === 'opacity' && node.material ? node.material.opacity : (prop === 'visible' ? (node.visible ? 1 : 0) : node[prop]); } };
+    if (!node[prop] || axis === undefined) return null;
+    return { node: node, set: function (v) { node[prop][axis] = v; }, get: function () { return node[prop][axis]; } };
+  }
+  // play a clip on an object: it joins the playing list and the frame drives it; a second play on the same object replaces the first
+  function playClip(obj, name, opt) {
+    var clip = CLIPS[name]; if (!clip || !obj) return null; opt = opt || {};
+    stopClip(obj);
+    var tracks = clip.tracks.map(function (t) { var tg = clipTarget(obj, t.path); return tg ? { keys: t.keys, tg: tg, from: tg.get() } : null; }).filter(Boolean);
+    var P = { obj: obj, name: name, clip: clip, t: 0, speed: opt.speed || 1, loop: opt.loop !== undefined ? !!opt.loop : !!clip.loop, blend: opt.blend === undefined ? 0.2 : +opt.blend, tracks: tracks, fired: {}, done: false, onDone: opt.onDone || null, hold: opt.hold !== false };
+    playing.push(P); if (obj.userData) obj.userData.clip = P; return P;
+  }
+  function stopClip(obj) { for (var i = playing.length - 1; i >= 0; i--) if (playing[i].obj === obj) { playing[i].done = true; playing.splice(i, 1); } if (obj && obj.userData) obj.userData.clip = null; }
+  function clipTick(dt) {
+    for (var i = playing.length - 1; i >= 0; i--) {
+      var P = playing[i], c = P.clip; P.t += dt * P.speed; var t = P.t, over = t >= c.duration;
+      if (over) { if (P.loop) { t = P.t = c.duration ? P.t % c.duration : 0; P.fired = {}; } else t = c.duration; }
+      var w = P.blend > 0 ? Math.min(1, P.t / P.blend) : 1;
+      P.tracks.forEach(function (tr) { var v = trackValue(tr.keys, t); if (v === undefined) return; tr.tg.set(w < 1 ? tr.from + (v - tr.from) * w : v); });
+      (c.events || []).forEach(function (e) { if (!P.fired[e[0] + ':' + e[1]] && t >= e[0]) { P.fired[e[0] + ':' + e[1]] = true; runHooks('clipEvent', P.obj, e[1], P); } });
+      if (over && !P.loop) { P.done = true; playing.splice(i, 1); if (P.obj.userData) P.obj.userData.clip = null; if (!P.hold) P.tracks.forEach(function (tr) { tr.tg.set(tr.from); }); if (P.onDone) P.onDone(P); }
+    }
+  }
+  animate(clipTick);
+  // what the editor reads and writes
+  function clipList() { return { order: CLIP_ORDER.slice(), clips: JSON.parse(JSON.stringify(CLIPS)), playing: playing.map(function (P) { return { name: P.name, t: Math.round(P.t * 100) / 100, loop: P.loop, obj: P.obj.userData && (P.obj.userData.propId || P.obj.userData.eid) || P.obj.name || null }; }) }; }
+  function clipCode() {
+    if (!CLIP_ORDER.length) return '';
+    var lines = ['//@ the clips the editor saved: animation as data, played by the engine. Written by the Co Engine editor; it sorts first in src/ so a game can play them from its first frame. Edit them in the editor rather than here.'];
+    CLIP_ORDER.forEach(function (n) { if (BUILTIN_CLIPS[n] && JSON.stringify(BUILTIN_CLIPS[n]) === JSON.stringify(CLIPS[n])) return; lines.push('  CO.clip(' + JSON.stringify(n) + ', ' + JSON.stringify(CLIPS[n]) + ');'); });
+    if (lines.length === 1) return ''; lines.push(''); return lines.join('\n');
+  }
+  // a pose from the current transforms of the paths a clip names: a key at time t for every track
+  function clipKeyPose(obj, name, t, ease) { var c = CLIPS[name]; if (!c) return null; var n = 0; c.tracks.forEach(function (tr) { var tg = clipTarget(obj, tr.path); if (!tg) return; var v = Math.round(tg.get() * 1000) / 1000, keys = tr.keys || (tr.keys = []), at = keys.findIndex(function (k) { return Math.abs(k[0] - t) < 1e-6; }); if (at >= 0) keys[at] = [t, v, ease || keys[at][2]]; else { keys.push([t, v, ease || 'smooth']); keys.sort(function (a, b) { return a[0] - b[0]; }); } n++; }); c.duration = Math.max(c.duration || 0, t); return n; }
+  // the clips every game starts with: a person's gestures, and a few for props
+  var BUILTIN_CLIPS = {
+    wave: { duration: 1.6, loop: false, tracks: [{ path: 'arm.1.rotation.x', keys: [[0, -0.2], [0.3, -2.6], [1.3, -2.6], [1.6, -0.2]] }, { path: 'elbow.1.rotation.x', keys: [[0, -0.15], [0.3, -0.6], [0.55, -1.2], [0.8, -0.5], [1.05, -1.2], [1.3, -0.6], [1.6, -0.15]] }, { path: 'arm.1.rotation.z', keys: [[0, -0.1], [0.3, -0.5], [1.3, -0.5], [1.6, -0.1]] }] },
+    nod: { duration: 0.9, loop: false, tracks: [{ path: 'head.rotation.x', keys: [[0, 0], [0.25, 0.35], [0.5, -0.05], [0.7, 0.3], [0.9, 0]] }] },
+    cheer: { duration: 1.4, loop: false, tracks: [{ path: 'arm.0.rotation.x', keys: [[0, -0.2], [0.35, -2.9], [1.0, -2.9], [1.4, -0.2]] }, { path: 'arm.1.rotation.x', keys: [[0, -0.2], [0.35, -2.9], [1.0, -2.9], [1.4, -0.2]] }, { path: 'torso.position.y', keys: [[0, 0.86], [0.35, 0.92], [0.5, 0.86], [0.7, 0.92], [0.9, 0.86]] }] },
+    point: { duration: 1.2, loop: false, tracks: [{ path: 'arm.1.rotation.x', keys: [[0, -0.2], [0.3, -1.5], [1.0, -1.5], [1.2, -0.2]] }, { path: 'elbow.1.rotation.x', keys: [[0, -0.15], [0.3, -0.05], [1.0, -0.05], [1.2, -0.15]] }, { path: 'head.rotation.y', keys: [[0, 0], [0.3, -0.3], [1.0, -0.3], [1.2, 0]] }] },
+    lift: { duration: 1.6, loop: false, tracks: [{ path: 'torso.position.y', keys: [[0, 0.86], [0.5, 0.62], [1.1, 0.62], [1.6, 0.86]] }, { path: 'knee.0.rotation.x', keys: [[0, 0], [0.5, 1.2], [1.1, 1.2], [1.6, 0]] }, { path: 'knee.1.rotation.x', keys: [[0, 0], [0.5, 1.2], [1.1, 1.2], [1.6, 0]] }, { path: 'leg.0.rotation.x', keys: [[0, 0], [0.5, -1.0], [1.1, -1.0], [1.6, 0]] }, { path: 'leg.1.rotation.x', keys: [[0, 0], [0.5, -1.0], [1.1, -1.0], [1.6, 0]] }, { path: 'arm.0.rotation.x', keys: [[0, -0.2], [0.5, -0.9], [1.1, -0.9], [1.6, -0.2]] }, { path: 'arm.1.rotation.x', keys: [[0, -0.2], [0.5, -0.9], [1.1, -0.9], [1.6, -0.2]] }], events: [[1.1, 'lifted']] },
+    spin: { duration: 2, loop: true, tracks: [{ path: 'rotation.y', keys: [[0, 0, 'linear'], [2, 6.2832, 'linear']] }] },
+    bob: { duration: 1.5, loop: true, tracks: [{ path: 'position.y', keys: [[0, 0], [0.75, 0.25], [1.5, 0]] }] },
+    swing: { duration: 2.4, loop: true, tracks: [{ path: 'rotation.z', keys: [[0, -0.35], [1.2, 0.35], [2.4, -0.35]] }] },
+    blink: { duration: 0.8, loop: true, tracks: [{ path: 'visible', keys: [[0, 1, 'step'], [0.4, 0, 'step'], [0.8, 1, 'step']] }] }
+  };
+  Object.keys(BUILTIN_CLIPS).forEach(function (n) { CO.clip(n, BUILTIN_CLIPS[n]); });
   // ── Log / toast ───────────────────────────────────────────────────
   function logEvent(msg, kind) {
     if (S && S.log) { S.log.unshift({ day: S.day, t: fmtTime(S.time || 0), msg: msg, kind: kind || '' }); if (S.log.length > 60) S.log.pop(); }
@@ -1534,7 +1607,7 @@
   function updateHud(dt) {
     hudT += dt; if (!hudDirty && hudT < 0.25) return; hudT = 0; hudDirty = false;
     if (S && !(CO.game && CO.game.hudFields === false)) { var d = $('h-day'); if (d && S.day !== undefined) d.textContent = 'Day ' + S.day + (isSunday() ? ' · Sunday' : ''); var c = $('h-clock'); if (c && S.time !== undefined) c.textContent = fmtTime(S.time); var b = $('h-cash'); if (b && S.bank !== undefined) { b.textContent = money(S.bank); b.style.color = S.bank < 0 ? 'var(--red)' : ''; } }
-    if (CO.game && CO.game.hud) CO.game.hud(); runHooks('hud');
+    if (CO.game && CO.game.hud) CO.game.hud(); uiHudFill(); runHooks('hud');
   }
   function updatePrompt() {
     var p = $('h-prompt'); if (!p) return;
@@ -1555,6 +1628,7 @@
   function renderPanel() {
     if (!ui.panelOpen) return;
     var spec = panel.kind === 'catalogue' ? { title: 'Catalogue · build mode', tabs: [], body: catalogueHtml() } : (CO.game && CO.game.panel ? CO.game.panel(panel.kind, panel.tab) : null);
+    if (!spec) spec = uiPanelSpec(panel.kind);   /* a panel the editor's UI tab described */
     if (!spec) spec = { title: panel.kind || '', tabs: [], body: '' };
     if (spec.tab && spec.tab !== panel.tab) panel.tab = spec.tab;
     var t = $('dc-panel-title'); if (t) t.textContent = spec.title || '';
@@ -1565,6 +1639,7 @@
   function panelAct(act, arg) {
     if (panel.kind === 'catalogue' && act === 'restore') { editRestore(arg); renderPanel(); return true; }
     if (panel.kind === 'catalogue' && act === 'buy') { closePanel(); editBuy(arg); return true; }   // only the catalogue's: a game's shop has a buy of its own
+    if (act === 'ui') return uiPanelAct(arg);
     if (CO.game && CO.game.panelAct && CO.game.panelAct(act, arg)) return true;
     runHooks('panelAct', act, arg); return false;
   }
@@ -1588,7 +1663,7 @@
     var dl = $('dc-m-devlink'); if (dl) dl.textContent = devLink.on ? 'Unlink the editor' : 'Link the editor';
     var body = $('dc-menu-body'); if (body) body.hidden = true; var btns = m.querySelector('.dc-menu-btns'); if (btns) btns.hidden = false;
     if (ui.scanOpen && CO.game && CO.game.scanToggle) CO.game.scanToggle(false); ui.suppressMenu = true; try { document.exitPointerLock(); } catch (e) {}
-    save(); var ms = $('dc-menu-sub'); if (ms) ms.textContent = (CO.game && CO.game.menuLine ? CO.game.menuLine() : 'The game waits until you come back.') + ' ' + (saveT && !save.failed ? 'Saved at ' + new Date(saveT).toLocaleTimeString() + ', slot ' + BOOT_SLOT + '.' : 'The save could not be written: export it below.');
+    save(); var ms = $('dc-menu-sub'); if (ms) ms.textContent = (CO.game && CO.game.menuLine ? CO.game.menuLine() : (UI.menuLine ? uiEval(UI.menuLine) : 'The game waits until you come back.')) + ' ' + (saveT && !save.failed ? 'Saved at ' + new Date(saveT).toLocaleTimeString() + ', slot ' + BOOT_SLOT + '.' : 'The save could not be written: export it below.');
     runHooks('menuOpen');
   }
   function closeMenu() { if (!ui.menuOpen) return; ui.menuOpen = false; var m = $('dc-menu'); if (m) m.hidden = true; lockPointer(); }
@@ -1600,7 +1675,7 @@
     else if (k === 'edit') { closeMenu(); if (!edit.on) editToggle(); }
     else if (k === 'devlink') { closeMenu(); devLinkToggle(); }
     else if (k === 'settings') menuBody(settingsHtml());
-    else if (k === 'guide') menuBody('<div class="dc-how">' + (CO.game && CO.game.guideHtml ? CO.game.guideHtml() : '<p>No guide yet.</p>') + '</div>');
+    else if (k === 'guide') menuBody('<div class="dc-how">' + (CO.game && CO.game.guideHtml ? CO.game.guideHtml() : (UI.guide ? uiTextHtml(UI.guide) : '<p>No guide yet.</p>')) + '</div>');
     else if (k === 'stats') menuBody(CO.game && CO.game.statsHtml ? CO.game.statsHtml() : '<p>No stats yet.</p>');
     else if (k === 'saves') menuBody('<p style="color:var(--muted)">This save as text. Copy it somewhere safe, or paste one in and load it.</p><textarea class="dc-ta" id="dc-save-ta">' + esc(JSON.stringify(S)) + '</textarea><div class="dc-menu-row"><button data-menu="download">⬇ Download .json</button><button data-menu="import" class="primary">Load what is pasted</button></div>');
     else if (k === 'download') { var blob = new Blob([JSON.stringify(S)], { type: 'application/json' }); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = CO.save.prefix + '-slot' + BOOT_SLOT + (S.day !== undefined ? '-day' + S.day : '') + '.json'; a.click(); }
@@ -1828,6 +1903,39 @@
   function fmtKg(n) { return (n < 10 ? Math.round(n * 10) / 10 : Math.round(n)) + ' kg'; }
   function fmtAgo(sec) { return sec < 60 ? Math.round(sec) + 's ago' : sec < 3600 ? Math.round(sec / 60) + 'm ago' : Math.round(sec / 3600) + 'h ago'; }
   function fmtLeft(sec) { return sec >= 60 ? Math.ceil(sec / 60) + ' min' : Math.ceil(sec) + ' s'; }
+  // ── UI as data ────────────────────────────────────────────────────
+  // hud: [{ label, value, color }]           chips in a row of their own under the engine's (value is an expression: 'S.day', 'money(S.bank)')
+  // panels: { kind: { title, text, buttons: [{ label, action, primary }] } }   openPanel(kind) shows it; text is paragraphs and '- ' lists; an action is a dev command ('cash 500') or an expression
+  // start: ['expression', ...]               the start screen's chips    menuLine: 'expression'    guide: 'text'
+  var UI = { hud: [], panels: {}, start: [], menuLine: '', guide: '' }, uiFns = {};
+  CO.ui = function (data) { if (!data) return UI; if (data.hud) UI.hud = data.hud.slice(); if (data.panels) { UI.panels = {}; for (var k in data.panels) UI.panels[k] = data.panels[k]; } if (data.start) UI.start = data.start.slice(); if (data.menuLine !== undefined) UI.menuLine = data.menuLine; if (data.guide !== undefined) UI.guide = data.guide; uiFns = {}; hudDirty = true; uiHudBuild(); return UI; };
+  function uiEval(expr) {
+    if (expr === undefined || expr === null || expr === '') return '';
+    var fn = uiFns[expr]; if (!fn) { try { fn = uiFns[expr] = new Function('K', 'with (K) { return (' + expr + '\n); }'); } catch (e) { return '?'; } }
+    try { var v = fn(editorKit()); return v === undefined || v === null ? '' : String(v); } catch (e2) { return '?'; }
+  }
+  function uiAction(action) {
+    if (!action) return false; var sp = String(action).indexOf(' '), name = sp < 0 ? action : action.slice(0, sp), arg = sp < 0 ? undefined : action.slice(sp + 1).trim();
+    if (devCommandList().indexOf(name) >= 0) { if (arg !== undefined && arg !== '' && !isNaN(arg)) arg = +arg; var r = devCommand(name, arg); hudDirty = true; return r; }   /* the engine's dev commands and the game's */
+    try { new Function('K', 'with (K) { ' + action + '\n }')(editorKit()); hudDirty = true; save(); return true; } catch (e) { toast('The button failed: ' + e.message, 'bad'); return false; }
+  }
+  // the HUD chips: a row of their own under the engine's top row, made once and filled on every HUD refresh
+  function uiHudBuild() {
+    var hud = $('dc-hud'); if (!hud) return null; var row = $('h-ui');
+    if (!row) { row = document.createElement('div'); row.id = 'h-ui'; row.style.cssText = 'position:absolute;top:52px;left:12px;display:flex;gap:8px;flex-wrap:wrap;max-width:60vw;pointer-events:none;font:13px/1.3 inherit'; hud.appendChild(row); }
+    row.innerHTML = UI.hud.map(function (f, i) { return '<span data-ui="' + i + '" style="background:rgba(5,8,12,0.6);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 10px' + (f.color ? ';color:' + f.color : '') + '"><span style="opacity:.6;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-right:6px">' + esc(f.label || '') + '</span><b></b></span>'; }).join('');
+    return row;
+  }
+  function uiHudFill() { if (!UI.hud.length) return; var row = $('h-ui') || uiHudBuild(); if (!row) return; var bs = row.querySelectorAll('b'); UI.hud.forEach(function (f, i) { if (bs[i]) bs[i].textContent = uiEval(f.value); }); }
+  function uiTextHtml(text) { return String(text || '').split(/\n\s*\n/).map(function (para) { var lines = para.split('\n'); if (lines.every(function (l) { return /^\s*-\s/.test(l); })) return '<ul>' + lines.map(function (l) { return '<li>' + esc(l.replace(/^\s*-\s/, '')) + '</li>'; }).join('') + '</ul>'; return '<p>' + esc(para).replace(/\n/g, '<br>') + '</p>'; }).join(''); }
+  function uiPanelSpec(kind) { var p = UI.panels[kind]; if (!p) return null; return { title: uiEval(p.titleExpr) || p.title || kind, tabs: [], body: '<div class="dc-how">' + uiTextHtml(p.text) + '</div>' + (p.buttons && p.buttons.length ? '<div class="dc-menu-row" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + p.buttons.map(function (b, i) { return '<button class="dc-btn ' + (b.primary ? 'primary' : '') + '" data-act="ui" data-arg="' + esc(kind + ':' + i) + '">' + esc(b.label || 'Button') + '</button>'; }).join('') + '</div>' : '') }; }
+  function uiPanelAct(arg) { var at = String(arg || '').lastIndexOf(':'), kind = arg.slice(0, at), i = +arg.slice(at + 1), p = UI.panels[kind], b = p && p.buttons && p.buttons[i]; if (!b) return false; var r = uiAction(b.action); if (b.close) closePanel(); else renderPanel(); if (typeof r === 'string') toast(r, ''); return true; }
+  function uiStartChips() { return UI.start.map(uiEval).filter(Boolean); }
+  function uiData() { return JSON.parse(JSON.stringify(UI)); }
+  function uiCode() {
+    var empty = !UI.hud.length && !Object.keys(UI.panels).length && !UI.start.length && !UI.menuLine && !UI.guide; if (empty) return '';
+    return '//@ the UI the editor saved: HUD chips, panels, the start screen chips, the pause line and the guide, as data over the kit. Written by the Co Engine editor; it sorts first in src/. Edit it in the editor rather than here.\n  CO.ui(' + JSON.stringify(UI, null, 2).replace(/\n/g, '\n  ') + ');\n';
+  }
   // ── The dev link ──────────────────────────────────────────────────
   // The editor (and the dev console) run a local server on 127.0.0.1:8432. The game links to it with Ctrl+Shift+D, when started
   // with ?dev=1, or, in the desktop app, by itself: every five seconds while unlinked it asks the port once and links when
@@ -2183,6 +2291,13 @@
     terrainNew: function (cfg) { cfg = cfg || {}; var T = CO.terrain({ w: cfg.w || 48, d: cfg.d || 48, cell: cfg.cell || 1, x0: cfg.x0, z0: cfg.z0, palette: cfg.palette, maxH: cfg.maxH }); if (!T.mesh) terrainBuild(); NAV.dirty = true; return terrainState(); },
     terrainOff: function () { var T = TERRAIN; if (T.mesh) { if (T.mesh.parent) T.mesh.parent.remove(T.mesh); T.mesh = null; } T.on = false; T.heights = null; T.paint = null; NAV.dirty = true; shadowDirty = true; return terrainState(); },
     materials: matGraphs, material: function (name, graph) { matBuild(name, graph); return { ok: true, name: name, shot: matShot(name) }; }, materialShot: matShot, materialCode: matGraphCode, materialRemove: matRemove,
+    clips: clipList, clip: function (name, clip) { if (!name) return { error: 'a clip needs a name' }; var c = CO.clip(name, clip); return { ok: true, name: name, duration: c.duration, tracks: c.tracks.length }; }, clipRemove: function (name) { if (!CLIPS[name]) return false; CO.clip(name, null); return true; }, clipCode: clipCode,
+    clipPlay: function (id, name, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; if (!CLIPS[name]) return { error: 'no clip ' + name }; var P = playClip(o, name, opt || {}); return P ? { ok: true, name: name, tracks: P.tracks.length, duration: P.clip.duration, loop: P.loop } : { error: 'the clip did not start' }; },
+    clipStop: function (id) { var o = eobj(id); if (o) stopClip(o); return !!o; },
+    clipSeek: function (id, name, t) { var o = eobj(id), c = CLIPS[name]; if (!o || !c) return { error: 'no such object or clip' }; stopClip(o); c.tracks.forEach(function (tr) { var tg = clipTarget(o, tr.path); if (tg) { var v = trackValue(tr.keys, t); if (v !== undefined) tg.set(v); } }); return { ok: true, t: t }; },
+    clipKey: function (id, name, t, ease) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var n = clipKeyPose(o, name, +t || 0, ease); return n === null ? { error: 'no clip ' + name } : { ok: true, keyed: n, t: +t || 0 }; },
+    clipPaths: function (id) { var o = eobj(id); if (!o) return []; var u = o.userData || {}, out = ['position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z', 'scale.x', 'scale.y', 'scale.z', 'visible']; if (u.legs) ['leg.0', 'leg.1', 'knee.0', 'knee.1', 'arm.0', 'arm.1', 'elbow.0', 'elbow.1', 'torso', 'head'].forEach(function (p) { out.push(p + '.rotation.x', p + '.rotation.y', p + '.rotation.z'); out.push(p + '.position.y'); }); o.children.forEach(function (ch, i) { if (ch.userData.editor) return; ['rotation.x', 'rotation.y', 'rotation.z', 'position.x', 'position.y', 'position.z'].forEach(function (f) { out.push('child.' + i + '.' + f); }); if (ch.name) out.push('name.' + ch.name + '.rotation.y'); }); return out; },
+    ui: uiData, uiSet: function (data) { CO.ui(data); if (ui.panelOpen) renderPanel(); return uiData(); }, uiCode: uiCode, uiOpen: function (kind) { openPanel(kind); return !!UI.panels[kind]; }, uiEval: uiEval,
     ids: function () { return { props: Object.keys(propInst), objects: Object.keys(EOBJ) }; }
   };
   // ── Boot ──────────────────────────────────────────────────────────
@@ -2211,7 +2326,7 @@
     applySettings(); resize();
     if (GAME.bake !== false && !/nobake=1/.test(location.search)) bakeStatic();
     if (!GAME.menuCamera) { camera.position.set(12, 3.6, 0); camera.lookAt(0, 1.4, 0); }   // a game with a menu camera of its own places the camera itself
-    var st = $('dc-start-stats'); if (st) st.innerHTML = (GAME.startStats ? GAME.startStats(loaded) : [loaded ? 'Day ' + S.day : 'New game']).map(function (s) { return '<span>' + esc(s) + '</span>'; }).join('');
+    var st = $('dc-start-stats'); if (st) st.innerHTML = (GAME.startStats ? GAME.startStats(loaded) : (UI.start.length ? uiStartChips() : [loaded ? 'Day ' + S.day : 'New game'])).map(function (s) { return '<span>' + esc(s) + '</span>'; }).join('');
     var sn = $('dc-start-note'); if (sn) sn.textContent = GAME.startNote ? GAME.startNote(loaded) : ('Slot ' + BOOT_SLOT + (loaded ? ' · last saved ' + (S.savedAt ? new Date(S.savedAt).toLocaleString() : 'never') : ''));
     var sb = $('dc-start-btn'); if (sb) sb.addEventListener('click', enter);
     requestAnimationFrame(frame);
@@ -2267,7 +2382,7 @@
       save: save, saveNow: saveNow, loadSave: loadSave, pay: pay, enter: enter, floorY: floorY, route: route, navFreeAt: navFreeAt, collides: collides, updatePlayer: updatePlayer, updateFocus: updateFocus, useFocus: useFocus, focusText: function () { return focusText; },
       lookAt: function (x, y, z) { camera.position.set(player.x, player.y + 1.62, player.z); camera.lookAt(x, y, z); camera.updateMatrixWorld(true); player.yaw = Math.atan2(-(x - player.x), -(z - player.z)); player.pitch = Math.atan2(y - camera.position.y, Math.sqrt(dist2(x, z, player.x, player.z))); updateFocus(); return focusText; },
       buildProp: buildProp, buildProps: buildProps, propPlacement: propPlacement, propWorld: propWorld, removePropInst: removePropInst, catalogueData: catalogueData, editToggle: editToggle, editGrab: editGrab, editDrop: editDrop, editRotate: editRotate, editReset: editReset, editRemove: editRemove, editRestore: editRestore, editBuy: editBuy,
-      hd: hd, doorById: doorById, doorUse: doorUse, doorLock: doorLock, doorsTick: doorsTick, doorSolids: doorSolids, lockAll: lockAll, drawScreens: drawScreens, screenTap: screenTap, screenZoneAt: screenZoneAt, screenDirtyAll: screenDirtyAll,
+      panelAct: panelAct, hd: hd, doorById: doorById, doorUse: doorUse, doorLock: doorLock, doorsTick: doorsTick, doorSolids: doorSolids, lockAll: lockAll, drawScreens: drawScreens, screenTap: screenTap, screenZoneAt: screenZoneAt, screenDirtyAll: screenDirtyAll,
       openPanel: openPanel, closePanel: closePanel, renderPanel: renderPanel, panelHtml: function () { var b = $('dc-panel-body'); return b ? b.innerHTML : ''; }, openMenu: openMenu, closeMenu: closeMenu, menuAct: menuAct, settingsHtml: settingsHtml, applySettings: applySettings, showCard: showCard, hideCards: hideCards,
       photoToggle: photoToggle, photoTick: photoTick, photoZoom: photoZoom, updateHud: updateHud, toast: toast, logEvent: logEvent, sfx: sfx,
       devCommand: devCommand, devCommandList: devCommandList, devLink: devLink, devLinkToggle: devLinkToggle, devState: devState,
@@ -2279,6 +2394,19 @@
     };
   }
   CO.boot = coBoot;
+  CO.layout({
+    props: {
+      "bench": { x: -3.8, z: 1.8, rot: 1, h: 0 },
+      "desk": { x: -2.35, z: -3.3, rot: 0, h: 0 },
+      "drum": { x: 4.35, z: 0.75, rot: 0, h: 0 },
+      "jack": { x: 1.65, z: 0.3, rot: 1, h: 0 },
+      "rack": { x: 4.5, z: -1.55, rot: 3, h: 0 },
+      "stands": { x: 0.65, z: -2.8, rot: 0, h: 0 },
+      "toolWall": { x: 0.7, z: -3.83, rot: 0, h: 0 },
+    },
+    placed: [
+    ]
+  });
   // ── Garage Co. ────────────────────────────────────────────────────
   // The first room of the game: a lock-up on the edge of town with a roll door onto a small forecourt. Cars come in off the road,
   // the customer walks to the desk, you take the job, fix the car in the bay and take the payment. Everything else in docs/PLAN.md
