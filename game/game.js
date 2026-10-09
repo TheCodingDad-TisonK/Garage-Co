@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.4.4', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.5.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -500,7 +500,8 @@
   // { base, amp }, metalness, bump: { amp, strength } or null, emissive, emissiveIntensity, glow, transparent, opacity }. The layers paint
   // one canvas from the bottom up; the same canvas is the colour map. A game's src/00-materials.js calls CO.material before the boot,
   // so a build function can say MAT.myBrick; the editor calls it again while running and every mesh on that material follows.
-  var MATGRAPH = {}, MATGRAPH_ORDER = [];
+  var MATGRAPH = {}, MATGRAPH_ORDER = [], MAT_TIME = { value: 0 };
+  animate(function (dt) { MAT_TIME.value += dt; });
   var MAT_LAYER_TYPES = ['fill', 'grain', 'blotches', 'cracks', 'noise', 'bricks', 'planks', 'tiles', 'stripes', 'checks', 'rings', 'speckle'];
   function matLayer(ctx, w, h, L, tag, k) {
     var t = L.type || 'fill', a = L.alpha === undefined ? 1 : +L.alpha, c1 = L.color || '#808080', c2 = L.color2 || '#404040', sz = L.size || 32, gap = L.gap === undefined ? 2 : +L.gap, n = L.n === undefined ? 200 : +L.n, i, j;
@@ -531,7 +532,10 @@
     if (m.map && m.map !== map) m.map.dispose(); if (m.roughnessMap && m.roughnessMap !== roughMap) m.roughnessMap.dispose(); if (m.normalMap && m.normalMap !== normalMap) m.normalMap.dispose();
     m.map = map; m.roughnessMap = roughMap; m.normalMap = normalMap; m.color.set(g.tint || '#ffffff'); m.roughness = rough ? 1 : (g.roughness === undefined ? 0.9 : +g.roughness); m.metalness = g.metalness || 0;
     m.emissive.set(g.emissive || '#000000'); m.emissiveIntensity = g.emissiveIntensity === undefined ? 1 : +g.emissiveIntensity; m.transparent = !!g.transparent || (g.opacity !== undefined && g.opacity < 1); m.opacity = g.opacity === undefined ? 1 : +g.opacity;
-    m.userData.glow = !!g.glow; m.userData.graph = true; m.name = name; m.needsUpdate = true;
+    m.userData.glow = !!g.glow; m.userData.graph = true; m.name = name;
+    // a GLSL snippet after the colour map: it may change diffuseColor, with vUv (when the material has a map) and uTime in seconds
+    if (g.glsl) { var src = String(g.glsl); m.onBeforeCompile = function (sh) { sh.uniforms.uTime = MAT_TIME; sh.fragmentShader = 'uniform float uTime;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + src); }; m.customProgramCacheKey = function () { return 'co-glsl:' + name + ':' + src.length + ':' + src.slice(0, 64); }; } else { m.onBeforeCompile = function () {}; m.customProgramCacheKey = function () { return 'co'; }; }
+    m.needsUpdate = true;
     MAT[name] = m; if (!MATGRAPH[name]) MATGRAPH_ORDER.push(name); MATGRAPH[name] = g; return m;
   }
   CO.material = function (name, graph) { if (!name) return MATGRAPH; return matBuild(String(name), graph); };
@@ -1465,9 +1469,14 @@
   function removeHinge(obj) { var i = HINGES.findIndex(function (h) { return h.obj === obj; }); if (i >= 0) HINGES.splice(i, 1); if (obj.userData) delete obj.userData.hinge; return i >= 0; }
   function swing(obj, omega) { var H = obj.userData && obj.userData.hinge; if (!H) return false; H.omega += omega; return true; }
   function hingeStep(dt) { HINGES.forEach(function (H) { H.omega += (PHYS.g / H.length) * Math.sin(H.angle) * dt - H.omega * H.damping * dt; H.angle += H.omega * dt; var o = H.obj; if (H.axis === 'z') { o.position.set(H.pivot[0] + Math.sin(H.angle) * H.length, H.pivot[1] - Math.cos(H.angle) * H.length, H.pivot[2]); o.rotation.z = H.angle; } else { o.position.set(H.pivot[0], H.pivot[1] - Math.cos(H.angle) * H.length, H.pivot[2] + Math.sin(H.angle) * H.length); o.rotation.x = -H.angle; } }); }
+  // a spring: a body pulled towards an anchor point with stiffness k and damping, around a rest length; a punch bag, a hanging sign that bounces
+  var SPRINGS = [];
+  function spring(obj, opt) { opt = opt || {}; var B = bodyOf(obj) || body(obj, { mass: opt.mass || 1 }); unspring(obj); var S2 = { B: B, anchor: opt.anchor || [obj.position.x, obj.position.y + 1, obj.position.z], k: opt.k === undefined ? 20 : +opt.k, damping: opt.damping === undefined ? 2 : +opt.damping, rest: opt.rest || 0 }; SPRINGS.push(S2); wake(B); return S2; }
+  function unspring(obj) { var i = SPRINGS.findIndex(function (s) { return s.B.obj === obj; }); if (i >= 0) SPRINGS.splice(i, 1); return i >= 0; }
+  function springStep(dt) { SPRINGS.forEach(function (S2) { var B = S2.B, p = B.obj.position, dx = S2.anchor[0] - p.x, dy = S2.anchor[1] - p.y, dz = S2.anchor[2] - p.z, len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, f = S2.k * (len - S2.rest) / B.mass; B.vel.x += (dx / len * f - B.vel.x * S2.damping) * dt; B.vel.y += (dy / len * f - B.vel.y * S2.damping - PHYS.g * 0) * dt; B.vel.z += (dz / len * f - B.vel.z * S2.damping) * dt; wake(B); }); }
   function physicsStep(dt) {
     var bodies = PHYS.bodies, i, j, k;
-    hingeStep(dt);
+    hingeStep(dt); springStep(dt);
     for (i = 0; i < bodies.length; i++) {
       var B = bodies[i]; if (B.kinematic || B.asleep) continue; var p = B.obj.position;
       B.vel.y += PHYS.g * dt; p.x += B.vel.x * dt; p.y += B.vel.y * dt; p.z += B.vel.z * dt; B.onGround = false;
@@ -1484,7 +1493,7 @@
     // spheres roll: the mesh turns with the ground speed
     for (i = 0; i < bodies.length; i++) { var R = bodies[i]; if (R.shape !== 'sphere' || R.asleep) continue; var sp = Math.sqrt(R.vel.x * R.vel.x + R.vel.z * R.vel.z); if (sp > 0.01) { var ax = new THREE.Vector3(R.vel.z, 0, -R.vel.x).normalize(); R.obj.rotateOnWorldAxis(ax, sp * dt / Math.max(0.05, R.hx)); } }
     // sleep when still
-    for (i = 0; i < bodies.length; i++) { var D = bodies[i]; if (D.kinematic || D.asleep) continue; if (D.onGround && D.vel.lengthSq() < 0.0025) { D.still += dt; if (D.still > PHYS.sleepT) { D.asleep = true; D.vel.set(0, 0, 0); } } else D.still = 0; }
+    for (i = 0; i < bodies.length; i++) { var D = bodies[i]; if (D.kinematic || D.asleep || SPRINGS.some(function (s) { return s.B === D; })) continue; if (D.onGround && D.vel.lengthSq() < 0.0025) { D.still += dt; if (D.still > PHYS.sleepT) { D.asleep = true; D.vel.set(0, 0, 0); } } else D.still = 0; }
     PHYS.stepped++;
   }
   function physicsTick(dt) {
@@ -1494,7 +1503,7 @@
     PHYS.bodies.forEach(function (B) { if (B.obj.userData && B.obj.userData.dynamic === undefined) shadowDirty = true; });
   }
   animate(physicsTick);
-  function physicsState() { return { on: PHYS.on && !(CO.game && CO.game.physics === false), g: PHYS.g, hinges: HINGES.map(function (H) { return { id: H.obj.userData && (H.obj.userData.propId || H.obj.userData.eid) || H.obj.name || null, angle: rnd(H.angle), length: H.length, axis: H.axis }; }), bodies: PHYS.bodies.map(function (B) { return { id: B.id, mass: B.mass, asleep: B.asleep, onGround: B.onGround, x: rnd(B.obj.position.x), y: rnd(B.obj.position.y), z: rnd(B.obj.position.z), vy: rnd(B.vel.y) }; }), stepped: PHYS.stepped, solver: CO.physicsSolver ? 'plugged' : 'built in' }; }
+  function physicsState() { return { on: PHYS.on && !(CO.game && CO.game.physics === false), g: PHYS.g, springs: SPRINGS.length, hinges: HINGES.map(function (H) { return { id: H.obj.userData && (H.obj.userData.propId || H.obj.userData.eid) || H.obj.name || null, angle: rnd(H.angle), length: H.length, axis: H.axis }; }), bodies: PHYS.bodies.map(function (B) { return { id: B.id, mass: B.mass, asleep: B.asleep, onGround: B.onGround, x: rnd(B.obj.position.x), y: rnd(B.obj.position.y), z: rnd(B.obj.position.z), vy: rnd(B.vel.y) }; }), stepped: PHYS.stepped, solver: CO.physicsSolver ? 'plugged' : 'built in' }; }
   // ── Clips ─────────────────────────────────────────────────────────
   // A clip: { duration, loop, tracks: [{ path, keys: [[t, value, ease]] }], events: [[t, name]] }. A path names a node and a field:
   // 'rotation.x' on the object itself, 'child.2.position.y' the third child, 'name.lamp.rotation.z' a named descendant, and on a
@@ -1521,6 +1530,7 @@
     else if (p[0] === 'torso' && u.torso) { node = u.torso; i = 1; }
     else if (p[0] === 'head' && u.head) { node = u.head; i = 1; }
     if (!node) return null; var prop = p[i], axis = p[i + 1];
+    if (prop === 'material') { var mm = node.material || (function () { var f = null; node.traverse(function (o) { if (!f && o.isMesh && o.material && !o.material.userData.shared) f = o.material; }); return f; })(); if (!mm) return null; if (axis === 'color' || axis === 'emissive') { var ch = p[i + 2]; if (!mm[axis] || 'rgb'.indexOf(ch) < 0) return null; return { node: node, set: function (v) { mm[axis][ch] = v; }, get: function () { return mm[axis][ch]; } }; } if (typeof mm[axis] !== 'number') return null; return { node: node, set: function (v) { mm[axis] = v; if (axis === 'opacity') mm.transparent = v < 1; }, get: function () { return mm[axis]; } }; }
     if (prop === 'visible' || prop === 'intensity' || prop === 'opacity') return { node: node, set: function (v) { if (prop === 'opacity' && node.material) { node.material.opacity = v; node.material.transparent = v < 1; } else node[prop] = prop === 'visible' ? v >= 0.5 : v; }, get: function () { return prop === 'opacity' && node.material ? node.material.opacity : (prop === 'visible' ? (node.visible ? 1 : 0) : node[prop]); } };
     if (!node[prop] || axis === undefined) return null;
     return { node: node, set: function (v) { node[prop][axis] = v; }, get: function () { return node[prop][axis]; } };
@@ -2024,6 +2034,35 @@
     var empty = !UI.hud.length && !Object.keys(UI.panels).length && !UI.start.length && !UI.menuLine && !UI.guide; if (empty) return '';
     return '//@ the UI the editor saved: HUD chips, panels, the start screen chips, the pause line and the guide, as data over the kit. Written by the Co Engine editor; it sorts first in src/. Edit it in the editor rather than here.\n  CO.ui(' + JSON.stringify(UI, null, 2).replace(/\n/g, '\n  ') + ');\n';
   }
+  // ── Tuning tables ─────────────────────────────────────────────────
+  var TABLES = {}, TABLE_ORDER = [], TUNE = {};
+  function pathGet(o, p) { var k = String(p).split('.'); for (var i = 0; i < k.length; i++) { if (o == null) return undefined; o = o[k[i]]; } return o; }
+  function pathSet(o, p, v) { var k = String(p).split('.'); for (var i = 0; i < k.length - 1; i++) { if (o[k[i]] == null) return false; o = o[k[i]]; } o[k[k.length - 1]] = v; return true; }
+  // the leaves of a table worth editing: numbers, strings and booleans, by path, at most 400 of them
+  function tableLeaves(obj) { var out = []; (function walk(o, pre, depth) { if (out.length >= 400 || depth > 5) return; Object.keys(o).forEach(function (k) { var v = o[k], p = pre ? pre + '.' + k : k; if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') out.push({ path: p, value: v, type: typeof v }); else if (v && typeof v === 'object' && !v.isObject3D && !v.isMaterial && typeof v !== 'function') walk(v, p, depth + 1); }); })(obj, '', 0); return out; }
+  CO.table = function (name, obj, desc) {
+    if (!name) return TABLES; if (!obj || typeof obj !== 'object') return obj;
+    if (!TABLES[name]) TABLE_ORDER.push(name);
+    var defaults = {}; tableLeaves(obj).forEach(function (l) { defaults[l.path] = l.value; });
+    TABLES[name] = { obj: obj, desc: desc || '', defaults: defaults };
+    var t = TUNE[name]; if (t) for (var p in t) pathSet(obj, p, t[p]);
+    return obj;
+  };
+  CO.tune = function (overrides) { for (var n in overrides) { TUNE[n] = TUNE[n] || {}; for (var p in overrides[n]) { TUNE[n][p] = overrides[n][p]; if (TABLES[n]) pathSet(TABLES[n].obj, p, overrides[n][p]); } } return TUNE; };
+  function tablesList() { return TABLE_ORDER.map(function (n) { var T = TABLES[n]; return { name: n, desc: T.desc, fields: tableLeaves(T.obj).map(function (l) { return { path: l.path, value: l.value, type: l.type, changed: T.defaults[l.path] !== undefined && T.defaults[l.path] !== l.value, was: T.defaults[l.path] }; }) }; }); }
+  function tableSet(name, path, value) {
+    var T = TABLES[name]; if (!T) return { error: 'no table ' + name }; var was = pathGet(T.obj, path); if (was === undefined) return { error: 'no field ' + path + ' in ' + name };
+    var v = typeof was === 'number' ? +value : typeof was === 'boolean' ? (value === true || value === 'true') : String(value); if (typeof was === 'number' && isNaN(v)) return { error: 'a number, please' };
+    pathSet(T.obj, path, v); TUNE[name] = TUNE[name] || {}; if (T.defaults[path] === v) delete TUNE[name][path]; else TUNE[name][path] = v;
+    hudDirty = true; screenDirtyAll();
+    histPush(name + '.' + path, function () { pathSet(T.obj, path, was); if (T.defaults[path] === was) delete TUNE[name][path]; else TUNE[name][path] = was; hudDirty = true; screenDirtyAll(); }, function () { pathSet(T.obj, path, v); if (T.defaults[path] === v) delete TUNE[name][path]; else TUNE[name][path] = v; hudDirty = true; screenDirtyAll(); });
+    return { ok: true, value: v };
+  }
+  function tablesCode() {
+    var out = {}, any = false; for (var n in TUNE) { var keys = Object.keys(TUNE[n]); if (keys.length) { out[n] = TUNE[n]; any = true; } }
+    if (!any) return '';
+    return '//@ the tuning the editor saved: changes to the game\'s tables (prices, the economy, the ladder) over what the code says. Written by the Co Engine editor\'s Settings tab; it sorts first in src/ and applies as each table registers.\n  CO.tune(' + JSON.stringify(out, null, 2).replace(/\n/g, '\n  ') + ');\n';
+  }
   // ── The dev link ──────────────────────────────────────────────────
   // The editor (and the dev console) run a local server on 127.0.0.1:8432. The game links to it with Ctrl+Shift+D, when started
   // with ?dev=1, or, in the desktop app, by itself: every five seconds while unlinked it asks the port once and links when
@@ -2108,7 +2147,7 @@
   // whatever else stands at the top, and the static world as a count. A game adds its own branches in CO.game.editorTree(eid).
   function editorTree() {
     var props = {}, lights = [], people = [], screensL = [], doors = [], vehicles = [], other = [], baked = 0, statics = 0;
-    for (var id in propInst) { var d = propInst[id].def || propDef(id) || {}; (props[d.cat || 'other'] = props[d.cat || 'other'] || []).push({ id: id, name: propLabel(id), type: 'prop', custom: !!customById(id), n: propInst[id].g.children.length }); }
+    for (var id in propInst) { var d = propInst[id].def || propDef(id) || {}; (props[d.cat || 'other'] = props[d.cat || 'other'] || []).push({ id: id, name: propLabel(id), type: 'prop', custom: !!customById(id), n: propInst[id].g.children.length, from: customById(id) ? 'save' : placedById(id) && !PROPS[id] ? 'layout' : (LAYOUT.props[id] ? 'definition, moved in the layout' : 'definition'), pack: !!(d.id && /^pk[A-Z]/.test(d.id)) }); }
     var roots = CO.root && CO.root !== scene ? [scene, CO.root] : [scene];
     roots.forEach(function (r) { r.children.forEach(function (o) {
       if (o === CO.root || o.userData.editor || isPropRoot(o)) return;
@@ -2192,6 +2231,7 @@
   // the scene view is the engine's free camera: the world holds still, the camera flies. frame(id) brings the camera to a thing.
   function editorEnter() { if (ui.started) return true; if (CO.game && CO.game.editorEnter) CO.game.editorEnter(); else enter(); return ui.started; }
   function editorMode(m) {
+    if (m === 'top') { editorMode('scene'); photo.y = Math.max(photo.y, 22); photo.pitch = -1.5; camera.position.set(photo.x, photo.y, photo.z); camera.rotation.set(photo.pitch, photo.yaw, 0, 'YXZ'); return photo.on ? 'top' : 'game'; }
     if (m === 'scene') { editorEnter(); if (ui.menuOpen) closeMenu(); if (ui.panelOpen) closePanel(); if (!photo.on) photoToggle(true); return photo.on ? 'scene' : 'game'; }
     if (photo.on) photoToggle(false); return 'game';
   }
@@ -2234,30 +2274,40 @@
   var editorTool = { mode: null, radius: 3, strength: 0.5, tex: 0 }, toolDown = false;
   function editorSetTool(t) { if (!t || !t.mode) { editorTool.mode = null; editorTool.type = null; return editorTool; } editorTool.mode = t.mode; editorTool.type = t.type || null; if (t.radius) editorTool.radius = +t.radius; if (t.strength !== undefined) editorTool.strength = +t.strength; if (t.tex !== undefined) editorTool.tex = t.tex | 0; return editorTool; }
   function toolApply(e) { var r = canvas.getBoundingClientRect(), nx = ((e.clientX - r.left) / r.width) * 2 - 1, ny = -((e.clientY - r.top) / r.height) * 2 + 1, pt = terrainPick(nx, ny); if (!pt) return; var res = terrainBrush(pt.x, pt.z, editorTool.mode, editorTool.radius, editorTool.mode === 'paint' ? 1 : editorTool.strength * 0.25, editorTool.tex); if (res && res.changed) console.log('[co-editor] ' + JSON.stringify({ terrain: res.changed })); }
-  var dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), dragPt = new THREE.Vector3(), propDrag = null, partDrag = null, dragT = 0;
+  var dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), dragPt = new THREE.Vector3(), propDrag = null, partDrag = null, dragT = 0, toolStroke = null;
+  function terrainRestore(h, p) { if (!TERRAIN.on || TERRAIN.heights.length !== h.length) return; TERRAIN.heights.set(h); TERRAIN.paint.set(p); terrainUpdate(0, 0, TERRAIN.w, TERRAIN.d); }
+  // the nearest wall face within 2.5 m, the way build mode snaps a wall prop: the point on it and the quarter turn that faces out
+  function wallSnap(pt, s) { var best = null, bd = 2.5; wallPlanes().forEach(function (w) { var d = w.a === 'x' ? Math.abs(pt.x - w.v) : Math.abs(pt.z - w.v); var within = w.a === 'x' ? (pt.z > w.z0 && pt.z < w.z1) : (pt.x > w.x0 && pt.x < w.x1); if (within && d < bd) { bd = d; best = w; } }); if (!best) return null; return best.a === 'x' ? { x: best.v, z: snapTo(pt.z, s || 0.05), rot: best.n > 0 ? 1 : 3 } : { x: snapTo(pt.x, s || 0.05), z: best.v, rot: best.n > 0 ? 0 : 2 }; }
   function pointOnPlane(e, y) { var r = canvas.getBoundingClientRect(), nx = ((e.clientX - r.left) / r.width) * 2 - 1, ny = -((e.clientY - r.top) / r.height) * 2 + 1; eRay.setFromCamera({ x: nx, y: ny }, camera); dragPlane.constant = -y; return eRay.ray.intersectPlane(dragPlane, dragPt) ? dragPt : null; }
   function snapTo(v, s) { return Math.round(v / s) * s; }
+  // the vertex of a mesh part nearest the pointer on screen, within 14 px
+  function nearestVertex(mesh, e) { var r = canvas.getBoundingClientRect(), pos = mesh.geometry.attributes.position, best = null, v = new THREE.Vector3(); mesh.updateMatrixWorld(true); for (var i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i); var w = v.clone().applyMatrix4(mesh.matrixWorld), sp = w.clone().project(camera), sx = (sp.x + 1) / 2 * r.width + r.left, sy = (1 - sp.y) / 2 * r.height + r.top, d = Math.hypot(sx - e.clientX, sy - e.clientY); if (d < 14 && (!best || d < best.d)) best = { i: mesh.userData.vertMap ? mesh.userData.vertMap[i] : i, d: d, w: w }; } return best; }
   function editorBind() {
     canvas.addEventListener('mousedown', function (e) {
       if (!CO.editor.on || !ui.started) return;
-      if (e.button === 0 && editorTool.mode === 'model' && editorTool.type) { var r0 = canvas.getBoundingClientRect(), mx = ((e.clientX - r0.left) / r0.width) * 2 - 1, my = -((e.clientY - r0.top) / r0.height) * 2 + 1, pk = modelPick(editorTool.type, mx, my); if (pk) { var inst0 = propInst[pk.id]; inst0.g.updateMatrixWorld(true); var partObj = null; inst0.g.traverse(function (o) { if (!partObj && o.userData && o.userData.part === pk.part) partObj = o; }); var wp = partObj ? partObj.getWorldPosition(new THREE.Vector3()) : inst0.g.position.clone(); var p0 = pointOnPlane(e, wp.y); if (p0) { partDrag = { type: editorTool.type, id: pk.id, part: pk.part, g: inst0.g, y: wp.y, off: p0.clone().sub(wp) }; console.log('[co-editor] ' + JSON.stringify({ partPick: pk.part, type: editorTool.type })); e.preventDefault(); return; } } }
-      if (e.button === 0 && editorTool.mode && editorTool.mode !== 'model' && TERRAIN.on) { toolDown = true; toolApply(e); e.preventDefault(); return; }
-      if (e.button === 0 && photo.on && editorSel && propInst[editorSel]) { var r1 = canvas.getBoundingClientRect(), sx = ((e.clientX - r1.left) / r1.width) * 2 - 1, sy = -((e.clientY - r1.top) / r1.height) * 2 + 1, hit1 = editorPick(sx, sy); var defS = propDef(editorSel); if (hit1 && hit1.id === editorSel && hit1.prop && !(defS && defS.fixed)) { var inst1 = propInst[editorSel], gy = inst1.g.position.y, p1 = pointOnPlane(e, gy); if (p1) { propDrag = { id: editorSel, g: inst1.g, y: gy, off: p1.clone().sub(inst1.g.position), before: layoutSnap(editorSel), moved: false }; e.preventDefault(); return; } } }
+      if (e.button === 0 && editorTool.mode === 'model' && editorTool.type) { var r0 = canvas.getBoundingClientRect(), mx = ((e.clientX - r0.left) / r0.width) * 2 - 1, my = -((e.clientY - r0.top) / r0.height) * 2 + 1, pk = modelPick(editorTool.type, mx, my); if (pk) { var inst0 = propInst[pk.id]; inst0.g.updateMatrixWorld(true); var partObj = null; inst0.g.traverse(function (o) { if (!partObj && o.userData && o.userData.part === pk.part) partObj = o; }); var wp = partObj ? partObj.getWorldPosition(new THREE.Vector3()) : inst0.g.position.clone(); var vh = partObj && partObj.userData.vertexEdit ? nearestVertex(partObj, e) : null; if (vh) { partDrag = { type: editorTool.type, id: pk.id, part: pk.part, g: inst0.g, mesh: partObj, vert: vh.i, y: vh.w.y }; console.log('[co-editor] ' + JSON.stringify({ partPick: pk.part, vert: vh.i, type: editorTool.type })); e.preventDefault(); return; } var p0 = pointOnPlane(e, wp.y); if (p0) { partDrag = { type: editorTool.type, id: pk.id, part: pk.part, g: inst0.g, y: wp.y, off: p0.clone().sub(wp) }; console.log('[co-editor] ' + JSON.stringify({ partPick: pk.part, type: editorTool.type })); e.preventDefault(); return; } } }
+      if (e.button === 0 && editorTool.mode && editorTool.mode !== 'model' && TERRAIN.on) { toolDown = true; toolStroke = { mode: editorTool.mode, h: Float32Array.from(TERRAIN.heights), p: Uint8Array.from(TERRAIN.paint) }; toolApply(e); e.preventDefault(); return; }
+      // Ctrl and the left button grab whatever prop is under the pointer, in the game view as well as the scene camera; in the scene camera the selected prop drags without Ctrl
+      if (e.button === 0 && (e.ctrlKey || e.metaKey)) { var rc = canvas.getBoundingClientRect(), cx = ((e.clientX - rc.left) / rc.width) * 2 - 1, cy = -((e.clientY - rc.top) / rc.height) * 2 + 1, hc = editorPick(cx, cy); if (hc && hc.prop && propInst[hc.id] && editorSel !== hc.id) { editorSelect(hc.id); console.log('[co-editor] ' + JSON.stringify({ select: hc.id, point: hc.point })); } }
+      if (e.button === 0 && (photo.on || e.ctrlKey || e.metaKey) && editorSel && propInst[editorSel]) { var r1 = canvas.getBoundingClientRect(), sx = ((e.clientX - r1.left) / r1.width) * 2 - 1, sy = -((e.clientY - r1.top) / r1.height) * 2 + 1, hit1 = editorPick(sx, sy); var defS = propDef(editorSel); if (hit1 && hit1.id === editorSel && hit1.prop && !(defS && defS.fixed)) { var inst1 = propInst[editorSel], gy = inst1.g.position.y, p1 = pointOnPlane(e, gy); if (p1) { propDrag = { id: editorSel, g: inst1.g, y: gy, off: p1.clone().sub(inst1.g.position), before: layoutSnap(editorSel), moved: false }; e.preventDefault(); return; } } }
       if (e.button === 0) { var r = canvas.getBoundingClientRect(), nx = ((e.clientX - r.left) / r.width) * 2 - 1, ny = -((e.clientY - r.top) / r.height) * 2 + 1, hit = editorPick(nx, ny); editorSelect(hit ? hit.id : null); console.log('[co-editor] ' + JSON.stringify({ select: hit ? hit.id : null, point: hit ? hit.point : null, nx: nx, ny: ny })); }
       if (e.button === 2) { CO.editor.drag = true; e.preventDefault(); }
     });
     document.addEventListener('mouseup', function (e) {
       if (e.button === 2) CO.editor.drag = false; if (e.button === 0) toolDown = false;
-      if (e.button === 0 && propDrag) { var D = propDrag; propDrag = null; if (D.moved) { var P = propPlacement(D.id), x = Math.round(D.g.position.x * 100) / 100, z = Math.round(D.g.position.z * 100) / 100; if (!S.layout) S.layout = {}; S.layout[D.id] = S.layout[D.id] || { x: P.x, z: P.z, rot: P.rot, h: P.h || 0 }; S.layout[D.id].x = x; S.layout[D.id].z = z; rebuildProp(D.id); save(); var after = layoutSnap(D.id), bef = D.before; histPush('move ' + D.id, function () { layoutRestore(D.id, bef); }, function () { layoutRestore(D.id, after); }); editorSelect(D.id); console.log('[co-editor] ' + JSON.stringify({ moved: D.id, x: x, z: z })); } }
+      if (e.button === 0 && toolStroke) { var TS = toolStroke; toolStroke = null; var afterH = Float32Array.from(TERRAIN.heights), afterP = Uint8Array.from(TERRAIN.paint); histPush('terrain ' + TS.mode, function () { terrainRestore(TS.h, TS.p); }, function () { terrainRestore(afterH, afterP); }); }
+      if (e.button === 0 && propDrag) { var D = propDrag; propDrag = null; if (D.moved) { var P = propPlacement(D.id), x = Math.round(D.g.position.x * 100) / 100, z = Math.round(D.g.position.z * 100) / 100; if (!S.layout) S.layout = {}; S.layout[D.id] = S.layout[D.id] || { x: P.x, z: P.z, rot: P.rot, h: P.h || 0 }; S.layout[D.id].x = x; S.layout[D.id].z = z; if (D.rot !== undefined) S.layout[D.id].rot = D.rot; rebuildProp(D.id); save(); var after = layoutSnap(D.id), bef = D.before; histPush('move ' + D.id, function () { layoutRestore(D.id, bef); }, function () { layoutRestore(D.id, after); }); editorSelect(D.id); console.log('[co-editor] ' + JSON.stringify({ moved: D.id, x: x, z: z })); } }
       if (e.button === 0 && partDrag) { console.log('[co-editor] ' + JSON.stringify({ partDragEnd: partDrag.part, type: partDrag.type })); partDrag = null; }
     });
     canvas.addEventListener('mousemove', function (e) {
       if (toolDown && editorTool.mode && editorTool.mode !== 'model' && TERRAIN.on) toolApply(e);
-      if (propDrag) { var p = pointOnPlane(e, propDrag.y); if (!p) return; var s = e.shiftKey ? 0.5 : 0.05, nx2 = snapTo(p.x - propDrag.off.x, s), nz2 = snapTo(p.z - propDrag.off.z, s); if (nx2 !== propDrag.g.position.x || nz2 !== propDrag.g.position.z) { propDrag.g.position.x = nx2; propDrag.g.position.z = nz2; propDrag.moved = true; if (editorHelper) editorHelper.update(); shadowDirty = true; } return; }
-      if (partDrag) { var pp = pointOnPlane(e, partDrag.y); if (!pp) return; var now = performance.now(); if (now - dragT < 40) return; dragT = now; var local = partDrag.g.worldToLocal(pp.clone().sub(partDrag.off)); var st = e.shiftKey ? 0.25 : 0.05; console.log('[co-editor] ' + JSON.stringify({ partDrag: partDrag.part, type: partDrag.type, x: snapTo(local.x, st), z: snapTo(local.z, st) })); }
+      if (propDrag) { var p = pointOnPlane(e, propDrag.y); if (!p) return; var s = e.shiftKey ? 0.5 : 0.05, nx2 = snapTo(p.x - propDrag.off.x, s), nz2 = snapTo(p.z - propDrag.off.z, s); var dd = propDef(propDrag.id); if (dd && dd.wall) { var ws2 = wallSnap({ x: nx2, z: nz2 }, s); if (ws2) { nx2 = ws2.x; nz2 = ws2.z; if (propDrag.g.rotation.y !== ws2.rot * Math.PI / 2) { propDrag.g.rotation.y = ws2.rot * Math.PI / 2; propDrag.rot = ws2.rot; } } } if (nx2 !== propDrag.g.position.x || nz2 !== propDrag.g.position.z) { propDrag.g.position.x = nx2; propDrag.g.position.z = nz2; propDrag.moved = true; if (editorHelper) editorHelper.update(); shadowDirty = true; } return; }
+      if (partDrag) { var pp = pointOnPlane(e, partDrag.y); if (!pp) return; var now = performance.now(); if (now - dragT < 40) return; dragT = now; var st = e.shiftKey ? 0.25 : 0.05; if (partDrag.vert !== undefined) { var lv = partDrag.mesh.worldToLocal(pp.clone()); console.log('[co-editor] ' + JSON.stringify({ vertDrag: partDrag.part, v: partDrag.vert, type: partDrag.type, x: snapTo(lv.x, st / 5), z: snapTo(lv.z, st / 5) })); return; } var local = partDrag.g.worldToLocal(pp.clone().sub(partDrag.off)); console.log('[co-editor] ' + JSON.stringify({ partDrag: partDrag.part, type: partDrag.type, x: snapTo(local.x, st), z: snapTo(local.z, st) })); }
     });
     window.addEventListener('blur', function () { CO.editor.drag = false; });
     canvas.addEventListener('contextmenu', function (e) { if (CO.editor.on) e.preventDefault(); });
+    // Ctrl and the wheel turn the prop under the pointer (or the selected one) a quarter at a time
+    canvas.addEventListener('wheel', function (e) { if (!CO.editor.on || !ui.started || !(e.ctrlKey || e.metaKey)) return; e.preventDefault(); e.stopImmediatePropagation(); var r2 = canvas.getBoundingClientRect(), wx = ((e.clientX - r2.left) / r2.width) * 2 - 1, wy = -((e.clientY - r2.top) / r2.height) * 2 + 1, hw = editorPick(wx, wy), id = hw && hw.prop && propInst[hw.id] ? hw.id : editorSel; if (!id || !propInst[id]) return; var dw = propDef(id); if (dw && dw.fixed) return; var rot = propPlacement(id).rot || 0; editorSet(id, 'prop.rot', (rot + (e.deltaY > 0 ? 1 : 3)) % 4); editorSelect(id); console.log('[co-editor] ' + JSON.stringify({ moved: id, rot: (rot + (e.deltaY > 0 ? 1 : 3)) % 4 })); }, { capture: true, passive: false });
     window.addEventListener('keydown', function (e) { if (!CO.editor.on || !(e.ctrlKey || e.metaKey)) return; var k = (e.key || '').toLowerCase(); if (k === 'z' && !e.shiftKey) { e.preventDefault(); console.log('[co-editor] ' + JSON.stringify({ history: editorUndoStep() })); } else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); console.log('[co-editor] ' + JSON.stringify({ history: editorRedoStep() })); } });
   }
   // ── Undo and redo: a stack of steps, each one knowing how to undo and redo itself ──
@@ -2411,19 +2461,22 @@
     layout: editorLayout, layoutAdopt: editorLayoutAdopt,
     setTool: editorSetTool, tool: function () { return editorTool; },
     setTool: editorSetTool, tool: function () { return editorTool; },
-    terrain: terrainState, terrainY: terrainY, terrainBrush: terrainBrush, terrainPick: terrainPick, terrainCode: terrainCode, terrainScatter: terrainScatter,
+    terrain: terrainState, terrainY: terrainY, terrainBrush: function (x, z, mode, radius, strength, tex) { if (!TERRAIN.on) return terrainBrush(x, z, mode, radius, strength, tex); var bh = Float32Array.from(TERRAIN.heights), bp = Uint8Array.from(TERRAIN.paint), r = terrainBrush(x, z, mode, radius, strength, tex); if (r && r.changed) { var ah = Float32Array.from(TERRAIN.heights), ap = Uint8Array.from(TERRAIN.paint); histPush('terrain ' + mode, function () { terrainRestore(bh, bp); }, function () { terrainRestore(ah, ap); }); } return r; }, terrainPick: terrainPick, terrainCode: terrainCode, terrainScatter: terrainScatter,
     terrainNew: function (cfg) { cfg = cfg || {}; var T = CO.terrain({ w: cfg.w || 48, d: cfg.d || 48, cell: cfg.cell || 1, x0: cfg.x0, z0: cfg.z0, palette: cfg.palette, maxH: cfg.maxH }); if (!T.mesh) terrainBuild(); NAV.dirty = true; return terrainState(); },
     terrainOff: function () { var T = TERRAIN; if (T.mesh) { if (T.mesh.parent) T.mesh.parent.remove(T.mesh); T.mesh = null; } T.on = false; T.heights = null; T.paint = null; NAV.dirty = true; shadowDirty = true; return terrainState(); },
-    materials: matGraphs, material: function (name, graph) { matBuild(name, graph); return { ok: true, name: name, shot: matShot(name) }; }, materialShot: matShot, materialCode: matGraphCode, materialRemove: matRemove,
+    materials: matGraphs, material: function (name, graph) { var prev = MATGRAPH[name] ? JSON.parse(JSON.stringify(MATGRAPH[name])) : null, next = JSON.parse(JSON.stringify(graph || {})); matBuild(name, next); histPush('material ' + name, function () { if (prev) matBuild(name, prev); else matRemove(name); }, function () { matBuild(name, next); }); return { ok: true, name: name, shot: matShot(name) }; }, materialShot: matShot, materialCode: matGraphCode, materialRemove: matRemove,
     clips: clipList, clip: function (name, clip) { if (!name) return { error: 'a clip needs a name' }; var c = CO.clip(name, clip); return { ok: true, name: name, duration: c.duration, tracks: c.tracks.length }; }, clipRemove: function (name) { if (!CLIPS[name]) return false; CO.clip(name, null); return true; }, clipCode: clipCode,
     clipPlay: function (id, name, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; if (!CLIPS[name]) return { error: 'no clip ' + name }; var P = playClip(o, name, opt || {}); return P ? { ok: true, name: name, tracks: P.tracks.length, duration: P.clip.duration, loop: P.loop } : { error: 'the clip did not start' }; },
     clipStop: function (id) { var o = eobj(id); if (o) stopClip(o); return !!o; },
     clipSeek: function (id, name, t) { var o = eobj(id), c = CLIPS[name]; if (!o || !c) return { error: 'no such object or clip' }; stopClip(o); c.tracks.forEach(function (tr) { var tg = clipTarget(o, tr.path); if (tg) { var v = trackValue(tr.keys, t); if (v !== undefined) tg.set(v); } }); return { ok: true, t: t }; },
     clipKey: function (id, name, t, ease) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var n = clipKeyPose(o, name, +t || 0, ease); return n === null ? { error: 'no clip ' + name } : { ok: true, keyed: n, t: +t || 0 }; },
     clipPaths: function (id) { var o = eobj(id); if (!o) return []; var u = o.userData || {}, out = ['position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z', 'scale.x', 'scale.y', 'scale.z', 'visible']; if (u.legs) ['leg.0', 'leg.1', 'knee.0', 'knee.1', 'arm.0', 'arm.1', 'elbow.0', 'elbow.1', 'torso', 'head'].forEach(function (p) { out.push(p + '.rotation.x', p + '.rotation.y', p + '.rotation.z'); out.push(p + '.position.y'); }); o.children.forEach(function (ch, i) { if (ch.userData.editor) return; ['rotation.x', 'rotation.y', 'rotation.z', 'position.x', 'position.y', 'position.z'].forEach(function (f) { out.push('child.' + i + '.' + f); }); if (ch.name) out.push('name.' + ch.name + '.rotation.y'); }); return out; },
-    ui: uiData, uiSet: function (data) { CO.ui(data); if (ui.panelOpen) renderPanel(); return uiData(); }, uiCode: uiCode, uiOpen: function (kind) { openPanel(kind); return !!UI.panels[kind]; }, uiEval: uiEval,
+    ui: uiData, uiSet: function (data) { var prev = uiData(), next = JSON.parse(JSON.stringify(data || {})); CO.ui(next); if (ui.panelOpen) renderPanel(); histPush('UI', function () { CO.ui(prev); }, function () { CO.ui(next); }); return uiData(); },
+    tables: tablesList, tableSet: tableSet, tablesCode: tablesCode, uiCode: uiCode, uiOpen: function (kind) { openPanel(kind); return !!UI.panels[kind]; }, uiEval: uiEval,
+    packCode: function (types) { var ids = (types && types.length ? types : PROP_ORDER.filter(function (id) { return !/^pk[A-Z]/.test(id); })).filter(function (id) { return PROPS[id] && PROPS[id].build; }); var lines = ['//@ a pack made in the Co Engine editor from ' + (CO.game && CO.game.handle || 'a game') + '\'s props. A prop that calls the game\'s own functions needs them in the game it goes to.']; ids.forEach(function (id) { var d = PROPS[id], f = {}; ['label', 'cat', 'wall', 'fixed', 'price', 'desc', 'lvl', 'ico', 'noBlob'].forEach(function (k) { if (d[k] !== undefined) f[k] = d[k]; }); f.extra = true; f.shop = false; var body = JSON.stringify(f); lines.push('  defProp(' + JSON.stringify(id) + ', Object.assign(' + body + ', { build: ' + d.build.toString() + (d.after ? ', after: ' + d.after.toString() : '') + ' }));'); }); return { ids: ids, code: lines.join('\n') + '\n' }; },
     model: modelOf, modelPreview: modelPreview, modelStart: modelStart, modelPick: modelPick, modelMirror: modelMirror, modelCode: modelCode,
     physics: physicsState, bodyAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var B = body(o, opt || {}); return { ok: true, id: B.id, size: [B.hx * 2, B.hy * 2, B.hz * 2] }; }, bodyRemove: function (id) { var o = eobj(id); return !!o && removeBody(o); }, impulse: function (id, vx, vy, vz) { var o = eobj(id); return !!o && impulse(o, vx, vy, vz); },
+    springAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var S2 = spring(o, opt || {}); return { ok: true, anchor: S2.anchor, k: S2.k }; }, springRemove: function (id) { var o = eobj(id); return !!o && unspring(o); },
     drop: editorDrop, hingeAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var H = hinge(o, opt || {}); return { ok: true, pivot: H.pivot, length: H.length, axis: H.axis }; }, hingeRemove: function (id) { var o = eobj(id); return !!o && removeHinge(o); },
     ids: function () { return { props: Object.keys(propInst), objects: Object.keys(EOBJ) }; }
   };
@@ -2438,6 +2491,7 @@
   function modelPartCode(p, i) {
     var x = n2(p.x), y = n2(p.y), z = n2(p.z), ry = p.ry ? ' p' + i + '.rotation.y = ' + n2(p.ry * Math.PI / 180) + ';' : '', tag = ' p' + i + '.userData.part = ' + i + ';';
     if (p.kind === 'box') return p.r ? 'var p' + i + ' = box(' + n2(p.w) + ', ' + n2(p.h) + ', ' + n2(p.d) + ', ' + matRef(p.mat) + ', ' + x + ', ' + y + ', ' + z + ', { parent: c.group, r: ' + n2(p.r) + ' });' + ry + tag : 'var p' + i + ' = c.box(' + n2(p.w) + ', ' + n2(p.h) + ', ' + n2(p.d) + ', ' + matRef(p.mat) + ', ' + x + ', ' + y + ', ' + z + ');' + ry + tag;
+    if (p.kind === 'mesh') { var vs = (p.verts || []).map(function (q) { return [n2(q[0]), n2(q[1]), n2(q[2])]; }), fs = (p.faces || []).map(function (q) { return [q[0] | 0, q[1] | 0, q[2] | 0]; }); return 'var p' + i + ' = (function () { var V = ' + JSON.stringify(vs) + ', F = ' + JSON.stringify(fs) + ', pos = [], map = []; F.forEach(function (f) { f.forEach(function (k) { pos.push(V[k][0], V[k][1], V[k][2]); map.push(k); }); }); var geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals(); var m = new THREE.Mesh(geo, ' + matRef(p.mat) + '); m.castShadow = m.receiveShadow = true; m.userData.vertexEdit = true; m.userData.vertMap = map; return c.add(m); })(); p' + i + '.position.set(' + x + ', ' + y + ', ' + z + ');' + ry + tag; }
     if (p.kind === 'lathe') return 'var p' + i + ' = c.add(new THREE.Mesh(new THREE.LatheGeometry(' + JSON.stringify((p.points || [[0.3, 0], [0.4, 0.5], [0.2, 1]]).map(function (q) { return [n2(q[0]), n2(q[1])]; })) + '.map(function (q) { return new THREE.Vector2(q[0], q[1]); }), ' + (p.seg || 24) + '), ' + matRef(p.mat) + ')); p' + i + '.position.set(' + x + ', ' + y + ', ' + z + '); p' + i + '.castShadow = p' + i + '.receiveShadow = true;' + ry + tag;
     if (p.kind === 'extrude') return 'var p' + i + ' = c.add(new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape(' + JSON.stringify((p.shape || [[-0.5, 0], [0.5, 0], [0, 0.8]]).map(function (q) { return [n2(q[0]), n2(q[1])]; })) + '.map(function (q) { return new THREE.Vector2(q[0], q[1]); })), { depth: ' + n2(p.depth || 0.2) + ', bevelEnabled: false }), ' + matRef(p.mat) + ')); p' + i + '.position.set(' + x + ', ' + y + ', ' + z + '); p' + i + '.castShadow = p' + i + '.receiveShadow = true;' + ry + tag;
     if (p.kind === 'cyl') return 'var p' + i + ' = c.cyl(' + n2(p.r) + ', ' + n2(p.h) + ', ' + matRef(p.mat) + ', ' + x + ', ' + y + ', ' + z + (p.seg || p.rb ? ', ' + (p.seg || 16) + (p.rb ? ', ' + n2(p.rb) : '') : '') + ');' + ry + tag;
@@ -2688,6 +2742,7 @@
     { id: 'bulb', symptom: 'The left headlight is out.', job: 'a headlight bulb', secs: 4, price: 15 },
     { id: 'battery', symptom: 'It would not start this morning.', job: 'a new battery', secs: 6, price: 95 }
   ];
+  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: how long each takes (secs) and what it pays');   // the editor's Settings tab tunes it
   var MAKES = ['Harlow Estate', 'Pennant 1.4', 'Kestrel Van', 'Dunmore Coupe', 'Alder Hatch', 'Brampton Saloon'];   // made-up makes, in the house look
   var NAMES = ['Mrs Okafor', 'Dan', 'Priya', 'Mr Holt', 'Lena', 'Sam', 'Mr Baptiste', 'Ruth'];
   CO.setup({ canvas: 'co-canvas', save: 'garageco', game: GAME, spawn: { x: 0, z: -1, yaw: Math.PI }, sun: { box: 40, far: 120, mapSize: 2048, target: [0, 0, 8] }, lightBudget: 8 });
