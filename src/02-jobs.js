@@ -55,13 +55,13 @@
   // one person, on the engine's rig, who walks the route finder's path from the car to the desk and back
   function spawnCustomer(car, atDesk) {
     var g = makeHuman({ name: car.name.replace(/^(Mr|Mrs) /, ''), style: pick(['short', 'long', 'bun', 'cap']) }); scene.add(g);
-    var start = atDesk ? DESK_STAND : { x: G.car.x + 1.7, z: G.car.z }, rec = { x: start.x, z: start.z, yaw: atDesk ? 0 : Math.PI, speed: 1.5, path: [] };
+    var start = atDesk ? deskStand() : { x: G.car.x + 1.7, z: G.car.z }, rec = { x: start.x, z: start.z, yaw: atDesk ? 0 : Math.PI, speed: 1.5, path: [] };
     g.position.set(rec.x, 0, rec.z); g.rotation.y = rec.yaw;
     G.customer = { g: g, rec: rec, walking: false, at: atDesk ? 'desk' : 'car', goal: 'desk', car: car };
     G.customer.hit = hitBox(0.7, 1.9, 0.7, 0, 0.95, 0, { prompt: customerPrompt, use: customerUse }, g);
     if (!atDesk) { customerGo('desk'); say(g, 'Morning. ' + faultOf(car).symptom); }
   }
-  function customerGo(goal) { var c = G.customer; if (!c) return; c.goal = goal; c.walking = true; var to = goal === 'car' ? { x: G.car.x + 1.7, z: G.car.z } : DESK_STAND; c.rec.path = route({ x: c.rec.x, z: c.rec.z }, to); }
+  function customerGo(goal) { var c = G.customer; if (!c) return; c.goal = goal; c.walking = true; var to = goal === 'car' ? { x: G.car.x + 1.7, z: G.car.z } : deskStand(); c.rec.path = route({ x: c.rec.x, z: c.rec.z }, to); }
   function removeCustomer() { var c = G.customer; if (!c) return; var k = inter.indexOf(c.hit); if (k >= 0) inter.splice(k, 1); scene.remove(c.g); G.customer = null; G.customerNearDoor = false; }
   function customerPrompt() {
     var J = S.job, c = G.customer; if (!J || !c) return null;
@@ -74,7 +74,7 @@
   function customerUse() { var J = S.job; if (!J || !G.customer || G.customer.walking) return; if (J.state === 'waiting') takeJob(); else if (J.state === 'done') takePayment(); else if (J.state === 'taken') say(G.customer.g, 'Take your time. Well, not too much.'); }
   function tickCustomer(dt) {
     var c = G.customer; if (!c) return;
-    G.customerNearDoor = c.walking && Math.abs(c.rec.z - LOCKUP.z) < 2.6 && Math.abs(c.rec.x) < 3.2;
+    var lo = LO(); G.customerNearDoor = c.walking && Math.abs(c.rec.z - lo.z - LOCKUP.z) < 2.6 && Math.abs(c.rec.x - lo.x) < 3.2;
     if (c.walking) {
       var done = walkAlong(c.rec, c.rec.path, c.rec.speed, dt); c.g.position.set(c.rec.x, 0, c.rec.z); c.g.rotation.y = c.rec.yaw; animateHuman(c.g, dt, done ? 'wait' : 'walk', 1, null, false);
       if (done) { c.walking = false; c.at = c.goal; if (c.goal === 'desk') { c.rec.yaw = Math.PI; say(c.g, S.job && S.job.state === 'waiting' ? 'Hello? Anyone about?' : 'Thanks.'); } else if (c.goal === 'car') { removeCustomer(); if (S.job) { S.job.state = 'leaving'; G.car.leg = 3; logEvent(S.job.car.name + ' drove off in the ' + S.job.car.make + '.'); } } }

@@ -21,9 +21,13 @@
   CO.setup({ canvas: 'co-canvas', save: 'garageco', game: GAME, spawn: { x: 0, z: -1, yaw: Math.PI }, sun: { box: 40, far: 120, mapSize: 2048, target: [0, 0, 8] }, lightBudget: 8 });
 
   // ── Where things are ──────────────────────────────────────────────
-  function inLockup(x, z, m) { m = m || 0; return Math.abs(x) < LOCKUP.x - m && Math.abs(z) < LOCKUP.z - m; }
+  // the lock-up is one world item: the editor can move the whole building, and every rule about it (where it is indoors, the roof,
+  // the walls, the doorway, where a customer waits) follows it. LO() is how far it stands from where the code built it
+  function LO() { var it = G.lockup, b = G.lockBase; return it && b ? { x: it.position.x - b.x, z: it.position.z - b.z } : { x: 0, z: 0 }; }
+  function inLockup(x, z, m) { m = m || 0; var o = LO(); x -= o.x; z -= o.z; return Math.abs(x) < LOCKUP.x - m && Math.abs(z) < LOCKUP.z - m; }
   function inForecourt(x, z, m) { m = m || 0; return Math.abs(x) < FORECOURT.x - m && z > FORECOURT.z0 + m && z < FORECOURT.z1 - m; }
-  function inDoorway(x, z) { return Math.abs(x) < LOCKUP.doorW / 2 - 0.2 && Math.abs(z - LOCKUP.z) < 0.6; }
+  function inDoorway(x, z) { var o = LO(); x -= o.x; z -= o.z; return Math.abs(x) < LOCKUP.doorW / 2 - 0.2 && Math.abs(z - LOCKUP.z) < 0.6; }
+  function deskStand() { var o = LO(); return { x: DESK_STAND.x + o.x, z: DESK_STAND.z + o.z }; }
   function faultOf(car) { return FAULTS.filter(function (f) { return f.id === car.fault; })[0] || FAULTS[0]; }
   GAME.floorY = function () { return 0; };
   // the plot around the lock-up: the ground you may walk on and where the editor may stand things. The forecourt can be widened and
@@ -32,7 +36,7 @@
   GAME.insideWalk = function (x, z) { if (inLockup(x, z, 0.35) || inDoorway(x, z)) return true; if (inLockup(x, z, -0.45)) return false; return Math.abs(x) < PLOT.x && z > PLOT.z0 && z < PLOT.z1; };
   GAME.indoors = function (x, z) { return inLockup(x, z); };
   GAME.roofAt = function (x, z) { return inLockup(x, z) ? LOCKUP.h + 0.3 : 0; };
-  GAME.wallPlanes = function () { var X = LOCKUP.x, Z = LOCKUP.z; return [{ a: 'x', v: -X + 0.17, n: 1, z0: -Z, z1: Z }, { a: 'x', v: X - 0.17, n: -1, z0: -Z, z1: Z }, { a: 'z', v: -Z + 0.17, n: 1, x0: -X, x1: X }, { a: 'z', v: Z - 0.17, n: -1, x0: -X, x1: X }]; };
+  GAME.wallPlanes = function () { var X = LOCKUP.x, Z = LOCKUP.z, o = LO(); return [{ a: 'x', v: o.x - X + 0.17, n: 1, z0: o.z - Z, z1: o.z + Z }, { a: 'x', v: o.x + X - 0.17, n: -1, z0: o.z - Z, z1: o.z + Z }, { a: 'z', v: o.z - Z + 0.17, n: 1, x0: o.x - X, x1: o.x + X }, { a: 'z', v: o.z + Z - 0.17, n: -1, x0: o.x - X, x1: o.x + X }]; };
   GAME.editClamp = function (pt) { if (inLockup(pt.x, pt.z)) return { x: pt.x, z: pt.z }; return { x: clamp(pt.x, -PLOT.x + 0.5, PLOT.x - 0.5), z: clamp(pt.z, PLOT.z0 + 0.5, PLOT.z1 - 0.5) }; };
   GAME.stepSurface = function (x, z) { return inLockup(x, z) ? 'floor' : 'outside'; };
   GAME.catalogueGroups = [['garage', '🔧 The workshop'], ['yard', '🌳 The forecourt']];
@@ -50,7 +54,9 @@
     box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, -(FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75); box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, (FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75);
     // the bay: two white lines and an end mark
     box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x - 1.5, 0.01, BAY.z); box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x + 1.5, 0.01, BAY.z); box(3.0, 0.02, 0.1, MAT.whiteLine, BAY.x, 0.01, BAY.z - 2.7);
-    // the lock-up: a slab, block walls (the roll door opening in the south wall, the side door in the east wall), a roof and two skylights
+    // the lock-up: a slab, block walls (the roll door opening in the south wall, the side door in the east wall), a roof and two skylights.
+    // All of it is one world item, so the editor moves the building as a whole and the rules above follow it
+    worldItem('lock-up', function () { G.lockup = WORLD_PARENT;
     var slab = plane(2 * X, 2 * Z, MAT.floor, 0, 0.01, 0, -Math.PI / 2); slab.receiveShadow = true;
     box(2 * X + 0.3, H, 0.3, MAT.block, 0, H / 2, -Z); solid(-X - 0.15, X + 0.15, -Z - 0.15, -Z + 0.15);
     box(0.3, H, 2 * Z + 0.3, MAT.block, -X, H / 2, 0); solid(-X - 0.15, -X + 0.15, -Z - 0.15, Z + 0.15);
@@ -67,22 +73,24 @@
     lineWall('x', X, -Z, Z, H - 0.4, MAT.plaster, [[1.6, 2.6, 2.25]], -1, { inset: 0.16 }); lineWall('z', Z, -X, X, H - 0.4, MAT.plaster, [[-DW / 2, DW / 2, DH]], -1, { inset: 0.16 });
     // the trusses and the light: two high bays, a point light under each
     [-1.5, 1.5].forEach(function (z) { box(2 * X - 0.4, 0.3, 0.2, MAT.steelDark, 0, H - 0.25, z); });
-    [[-2.5, -1.5], [2.5, 1.5]].forEach(function (p) { highBay(p[0], H - 0.95, p[1], H); var l = new THREE.PointLight(0xffeacc, 0.6, 14, 2); l.position.set(p[0], H - 1.2, p[1]); scene.add(l); G.lamps.push(l); });
+    [[-2.5, -1.5], [2.5, 1.5]].forEach(function (p) { highBay(p[0], H - 0.95, p[1], H); var l = new THREE.PointLight(0xffeacc, 0.6, 14, 2); l.position.set(p[0], H - 1.2, p[1]); parentOf(null).add(l); G.lamps.push(l); });
     // the side door, hinged, with a window; the roll door, a corrugated panel that rolls into a box over the lintel (E on the chain)
     G.sideDoor = hingedDoor('side', X, 1.6, false, 'the side door', { window: true });
-    G.roll = new THREE.Group(); G.roll.userData.dynamic = true; G.roll.position.set(0, 0, Z); scene.add(G.roll);
+    G.roll = new THREE.Group(); G.roll.userData.dynamic = true; G.roll.position.set(0, 0, Z); parentOf(null).add(G.roll);
     G.rollPanel = box(DW, DH, 0.08, MAT.door, 0, DH / 2, 0, G.roll); G.rollPanel.castShadow = false;
     box(0.12, DH + 0.1, 0.2, MAT.steelDark, -DW / 2 - 0.06, (DH + 0.1) / 2, Z); box(0.12, DH + 0.1, 0.2, MAT.steelDark, DW / 2 + 0.06, (DH + 0.1) / 2, Z); box(DW + 0.4, 0.42, 0.46, MAT.steelDark, 0, DH + 0.24, Z - 0.3);
     cyl(0.012, 1.3, MAT.chrome, DW / 2 + 0.35, 1.55, Z - 0.22, null, 6);
     hitBox(0.4, 1.4, 0.4, DW / 2 + 0.35, 1.5, Z - 0.22, { prompt: function () { return (S.doorOpen ? 'Pull the chain: close' : 'Pull the chain: open') + ' the roll door'; }, use: function () { S.doorOpen = !S.doorOpen; sfx(S.doorOpen ? 'unlock' : 'lock'); hudDirty = true; } });
     sign(['GARAGE CO.'], 4.2, 0.9, 0, H + 0.75, Z + 0.22, 0, { bg: '#1b232c' });
+    }, null);
+    if (G.lockup) { G.lockBase = { x: G.lockup.position.x, z: G.lockup.position.z }; G.lockup.userData.movesOnly = true; }   // the rules follow where it stands, not a turn or a new size
     // the forecourt: two trees, a lamp post, the sky, the road's traffic. The fence down both sides is made of fence section props
     // (placed in src/00-layout.js), so it moves, goes and grows in the editor like anything else
     tree(-20, 10, 1.2); tree(21, 18, 0.9); tree(-9, -8, 1.0); lampPost(12, 6, 0, 5);
     buildSky({ clouds: 6, rainN: 2500, snowN: 1200 });
     traffic.x0 = -90; traffic.x1 = 90; trafficAdd(ROAD_Z + LANE, 1, 9); trafficAdd(ROAD_Z - LANE, -1, 8);
     buildProps();
-    navSetup({ x0: -FORECOURT.x - 2, z0: -LOCKUP.z - 2, width: 2 * FORECOURT.x + 4, depth: ROAD_Z + 6 + LOCKUP.z, cell: 0.4 });
+    navSetup({ x0: -PLOT.x, z0: PLOT.z0, width: 2 * PLOT.x, depth: PLOT.z1 - PLOT.z0 + 2, cell: 0.4 });
   };
   // the roll door rides up into its box while open, or while a customer walks through; the shadow map follows it
   function tickRoll(dt) {
