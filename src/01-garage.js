@@ -26,11 +26,14 @@
   function inDoorway(x, z) { return Math.abs(x) < LOCKUP.doorW / 2 - 0.2 && Math.abs(z - LOCKUP.z) < 0.6; }
   function faultOf(car) { return FAULTS.filter(function (f) { return f.id === car.fault; })[0] || FAULTS[0]; }
   GAME.floorY = function () { return 0; };
-  GAME.insideWalk = function (x, z) { return inLockup(x, z, 0.35) || inForecourt(x, z, 0.35) || inDoorway(x, z) || (z >= FORECOURT.z1 - 0.35 && z < ROAD_Z + 4 && Math.abs(x) < FORECOURT.x); };
+  // the plot around the lock-up: the ground you may walk on and where the editor may stand things. The forecourt can be widened and
+  // the fence moved out in the editor, so the plot reaches well past both; walls and fences still stop you through their solids
+  var PLOT = { x: FORECOURT.x + 24, z0: -LOCKUP.z - 12, z1: ROAD_Z + 4 };
+  GAME.insideWalk = function (x, z) { if (inLockup(x, z, 0.35) || inDoorway(x, z)) return true; if (inLockup(x, z, -0.45)) return false; return Math.abs(x) < PLOT.x && z > PLOT.z0 && z < PLOT.z1; };
   GAME.indoors = function (x, z) { return inLockup(x, z); };
   GAME.roofAt = function (x, z) { return inLockup(x, z) ? LOCKUP.h + 0.3 : 0; };
   GAME.wallPlanes = function () { var X = LOCKUP.x, Z = LOCKUP.z; return [{ a: 'x', v: -X + 0.17, n: 1, z0: -Z, z1: Z }, { a: 'x', v: X - 0.17, n: -1, z0: -Z, z1: Z }, { a: 'z', v: -Z + 0.17, n: 1, x0: -X, x1: X }, { a: 'z', v: Z - 0.17, n: -1, x0: -X, x1: X }]; };
-  GAME.editClamp = function (pt) { if (inLockup(pt.x, pt.z)) return { x: pt.x, z: pt.z }; return { x: clamp(pt.x, -FORECOURT.x + 0.5, FORECOURT.x - 0.5), z: clamp(pt.z, FORECOURT.z0 + 0.5, FORECOURT.z1 - 0.5) }; };
+  GAME.editClamp = function (pt) { if (inLockup(pt.x, pt.z)) return { x: pt.x, z: pt.z }; return { x: clamp(pt.x, -PLOT.x + 0.5, PLOT.x - 0.5), z: clamp(pt.z, PLOT.z0 + 0.5, PLOT.z1 - 0.5) }; };
   GAME.stepSurface = function (x, z) { return inLockup(x, z) ? 'floor' : 'outside'; };
   GAME.catalogueGroups = [['garage', '🔧 The workshop'], ['yard', '🌳 The forecourt']];
   // the roll door is yours to open; while it is down nobody walks through the doorway (a customer has it opened for them)
