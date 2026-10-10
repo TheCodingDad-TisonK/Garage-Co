@@ -11,17 +11,17 @@ module.exports = `
   // the building
   ok(T.solids.length >= 8 && T.lampMeshes.length >= 5 && T.hdoors.length === 1, 'walls, lamps and the side door stand: ' + T.solids.length + ' solids, ' + T.lampMeshes.length + ' lenses');
   ok(['toolWall', 'bench', 'desk', 'jack', 'stands', 'drum', 'rack', 'noticeBoard'].every((id) => !!T.propInst[id]) && T.PROPS.xCompressor.extra, 'the fittings are built and the compressor is in the catalogue');
-  ok(!!T.G.rollPanel && S.doorOpen === false && T.GAME.collides(0, T.LOCKUP.z) === true && T.GAME.collides(0, 0) === false, 'the roll door is down and blocks the doorway');
-  S.doorOpen = true; ok(T.GAME.collides(0, T.LOCKUP.z) === false, 'an open roll door lets you through'); T.tickRoll(2); ok(T.G.rollPanel.scale.y < 0.5, 'the panel rolled up: scale ' + T.G.rollPanel.scale.y.toFixed(2)); S.doorOpen = false;
-  ok(T.navFreeAt(0, 0) && T.navFreeAt(0, T.LOCKUP.z) && T.navFreeAt(T.BAY.x + 2, T.BAY.z) && !T.navFreeAt(-T.LOCKUP.x, 0) && !T.navFreeAt(0, 40), 'the route finder walks the lock-up, the doorway and the forecourt, not the walls or the far road');
+  const LO = T.LO(); ok(!!T.G.rollPanel && S.doorOpen === false && T.GAME.collides(LO.x, LO.z + T.LOCKUP.z) === true && T.GAME.collides(LO.x, LO.z) === false, 'the roll door is down and blocks the doorway (the lock-up stands at ' + LO.x + ',' + LO.z + ')');
+  S.doorOpen = true; ok(T.GAME.collides(LO.x, LO.z + T.LOCKUP.z) === false, 'an open roll door lets you through'); T.tickRoll(2); ok(T.G.rollPanel.scale.y < 0.5, 'the panel rolled up: scale ' + T.G.rollPanel.scale.y.toFixed(2)); S.doorOpen = false;
+  ok(T.navFreeAt(LO.x, LO.z) && T.navFreeAt(LO.x, LO.z + T.LOCKUP.z) && T.navFreeAt(T.BAY.x + 2, T.BAY.z) && !T.navFreeAt(LO.x - T.LOCKUP.x, LO.z) && !T.navFreeAt(0, 40), 'the route finder walks the lock-up, the doorway and the forecourt, not the walls or the far road');
   ok(T.traffic.cars.length === 2, 'two cars on the road');
   // a car comes in
   const car = T.spawnCar(); ok(!!car && S.job && S.job.state === 'coming' && !!T.car() && T.car().x < -60, 'a car is on the way: ' + car.name + ' in a ' + car.make + ' with ' + car.fault);
   T.run(18); ok(S.job.state === 'waiting' && Math.abs(T.car().x - T.BAY.x) < 0.01 && Math.abs(T.car().z - T.BAY.z) < 0.01, 'the car parked in the bay: ' + T.car().x.toFixed(1) + ',' + T.car().z.toFixed(1));
   ok(!!T.customer() && T.customer().walking && T.customer().goal === 'desk', 'the customer got out and is walking to the desk');
-  T.run(16); ok(!!T.customer() && !T.customer().walking && T.customer().at === 'desk' && Math.abs(T.customer().rec.x - T.DESK_STAND.x) < 0.6 && Math.abs(T.customer().rec.z - T.DESK_STAND.z) < 0.6, 'the customer stands at the desk: ' + T.customer().rec.x.toFixed(1) + ',' + T.customer().rec.z.toFixed(1));
+  T.run(16); ok(!!T.customer() && !T.customer().walking && T.customer().at === 'desk' && Math.abs(T.customer().rec.x - T.deskStand().x) < 0.6 && Math.abs(T.customer().rec.z - T.deskStand().z) < 0.6, 'the customer stands at the desk: ' + T.customer().rec.x.toFixed(1) + ',' + T.customer().rec.z.toFixed(1));
   // take the job at the desk
-  T.player.x = T.DESK_STAND.x; T.player.z = T.DESK_STAND.z + 1.6; T.player.y = 0;
+  T.player.x = T.deskStand().x; T.player.z = T.deskStand().z + 1.6; T.player.y = 0;
   { const txt = T.lookAt(T.customer().rec.x, 1.3, T.customer().rec.z); ok(/Take the job/.test(txt), 'looking at the customer offers the job: ' + txt); }
   T.useFocus(); ok(S.job.state === 'taken', 'E takes the job: ' + S.job.state);
   T.openPanel('jobs'); ok(/job card open/.test(T.panelHtml()) && /The clipboard/.test(document.getElementById('dc-panel-title').textContent), 'the clipboard shows the open job'); T.closePanel();
@@ -33,7 +33,7 @@ module.exports = `
   T.player.x = -3; T.player.z = 0; T.run(2); ok(Math.abs(S.job.progress - p1) < 1e-9, 'it stops when you walk away');
   T.player.x = T.BAY.x + 2.4; T.player.z = T.BAY.z; T.run(T.faultOf(car).secs + 1); ok(S.job.state === 'done' && S.stats.fixed === 1, 'the job is done: ' + S.job.state);
   // the payment at the desk
-  T.player.x = T.DESK_STAND.x; T.player.z = T.DESK_STAND.z + 1.6;
+  T.player.x = T.deskStand().x; T.player.z = T.deskStand().z + 1.6;
   { const txt = T.lookAt(T.customer().rec.x, 1.3, T.customer().rec.z); ok(/Take the payment/.test(txt), 'the customer pays: ' + txt); }
   const price = S.job.price, bank0 = S.bank; T.useFocus();
   ok(S.bank === bank0 + price && S.stats.jobs === 1 && S.done.length === 1 && S.done[0].price === price && S.ledger[0].n === price, 'paid ' + price + ': bank ' + S.bank + ', one job in the book');

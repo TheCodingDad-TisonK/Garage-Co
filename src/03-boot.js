@@ -46,7 +46,7 @@
   GAME.present = function (dt) { tickRoll(dt); };
   GAME.hiddenTick = function (dt) { tickRoll(dt); };
   GAME.T = function () {
-    return { GAME: GAME, G: G, traffic: traffic, FAULTS: FAULTS, LOCKUP: LOCKUP, FORECOURT: FORECOURT, BAY: BAY, DESK: DESK, DESK_STAND: DESK_STAND, ROAD_Z: ROAD_Z, inLockup: inLockup, inForecourt: inForecourt, inDoorway: inDoorway, faultOf: faultOf,
+    return { GAME: GAME, G: G, traffic: traffic, FAULTS: FAULTS, LOCKUP: LOCKUP, FORECOURT: FORECOURT, BAY: BAY, DESK: DESK, DESK_STAND: DESK_STAND, ROAD_Z: ROAD_Z, inLockup: inLockup, inForecourt: inForecourt, inDoorway: inDoorway, LO: LO, deskStand: deskStand, faultOf: faultOf,
       newCar: newCar, spawnCar: spawnCar, removeCar: removeCar, placeCar: placeCar, spawnCustomer: spawnCustomer, removeCustomer: removeCustomer, restoreJob: restoreJob, takeJob: takeJob, fixStart: fixStart, takePayment: takePayment, addXp: addXp, xpFor: xpFor, tickRoll: tickRoll,
       car: function () { return G.car; }, customer: function () { return G.customer; }, carPrompt: carPrompt, customerPrompt: customerPrompt, drawJobCard: drawJobCard };
   };
