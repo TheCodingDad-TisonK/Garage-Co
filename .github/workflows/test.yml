@@ -25,6 +25,7 @@ jobs:
           CO_ENGINE_TOKEN: ${{ secrets.CO_ENGINE_TOKEN }}
         run: |
           if [ -z "$CO_ENGINE_TOKEN" ]; then echo "::error::The CO_ENGINE_TOKEN secret is missing. Co Engine is a private repo, so npm cannot fetch it without a read-only token (see the repo's Settings, Secrets and variables, Actions)."; exit 1; fi
+          git config --local --unset-all http.https://github.com/.extraheader || true   # the checkout token would be sent instead of ours, and it cannot see Co-Engine
           base="https://x-access-token:${CO_ENGINE_TOKEN}@github.com/TheCodingDad-TisonK/Co-Engine"
           git config --global url."$base".insteadOf "ssh://git@github.com/TheCodingDad-TisonK/Co-Engine"
           git config --global --add url."$base".insteadOf "git@github.com:TheCodingDad-TisonK/Co-Engine"
