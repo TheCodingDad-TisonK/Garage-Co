@@ -73,8 +73,8 @@
     cyl(0.012, 1.3, MAT.chrome, DW / 2 + 0.35, 1.55, Z - 0.22, null, 6);
     hitBox(0.4, 1.4, 0.4, DW / 2 + 0.35, 1.5, Z - 0.22, { prompt: function () { return (S.doorOpen ? 'Pull the chain: close' : 'Pull the chain: open') + ' the roll door'; }, use: function () { S.doorOpen = !S.doorOpen; sfx(S.doorOpen ? 'unlock' : 'lock'); hudDirty = true; } });
     sign(['GARAGE CO.'], 4.2, 0.9, 0, H + 0.75, Z + 0.22, 0, { bg: '#1b232c' });
-    // the forecourt: the fence down both sides, two trees, a lamp post, the sky, the road's traffic
-    fenceRun(-FORECOURT.x, FORECOURT.z0, -FORECOURT.x, FORECOURT.z1); fenceRun(FORECOURT.x, FORECOURT.z0, FORECOURT.x, FORECOURT.z1);
+    // the forecourt: two trees, a lamp post, the sky, the road's traffic. The fence down both sides is made of fence section props
+    // (placed in src/00-layout.js), so it moves, goes and grows in the editor like anything else
     tree(-20, 10, 1.2); tree(21, 18, 0.9); tree(-9, -8, 1.0); lampPost(12, 6, 0, 5);
     buildSky({ clouds: 6, rainN: 2500, snowN: 1200 });
     traffic.x0 = -90; traffic.x1 = 90; trafficAdd(ROAD_Z + LANE, 1, 9); trafficAdd(ROAD_Z - LANE, -1, 8);
@@ -126,4 +126,19 @@
   defProp('noticeBoard', { label: 'notice board', cat: 'garage', wall: true, x: -4.83, z: -2.6, rot: 1, build: function (c) { c.box(1.2, 0.9, 0.04, MAT.wood, 0, 1.7, 0); c.plane(1.1, 0.8, MAT.cork, 0, 1.7, 0.025, 0, 0); c.sign(['OPEN 8 TO 6'], 0.5, 0.16, 0.2, 1.9, 0.03, 0, { bg: '#f3efe4', fg: '#1b232c' }); } });
   defProp('xCompressor', { extra: true, label: 'compressor', cat: 'garage', price: 300, desc: 'A tank on wheels, a motor on top. Air for the tools.', build: function (c) { var t = c.cyl(0.25, 0.9, MAT.red, 0, 0.45, 0, 16); t.rotation.z = Math.PI / 2; c.box(0.3, 0.25, 0.3, MAT.black, 0, 0.75, 0); c.cyl(0.06, 0.04, MAT.rubber, -0.3, 0.1, 0.2, 10).rotation.z = Math.PI / 2; c.cyl(0.06, 0.04, MAT.rubber, 0.3, 0.1, 0.2, 10).rotation.z = Math.PI / 2; c.solid(-0.5, 0.5, -0.3, 0.3, 0, 0.9); } });
   defProp('xStool', { extra: true, label: 'stool', cat: 'garage', price: 25, desc: 'A mechanic sits down sometimes.', build: function (c) { c.cyl(0.18, 0.05, MAT.red, 0, 0.6, 0, 16); c.cyl(0.02, 0.58, MAT.chrome, 0, 0.3, 0, 8); c.cyl(0.2, 0.03, MAT.steelDark, 0, 0.02, 0, 16); c.solid(-0.2, 0.2, -0.2, 0.2, 0, 0.65); } });
+  // a 3 m section of the forecourt fence: posts with concrete feet, the mesh panel, two folds, the rails, the gravel board and three strands
+  // of barbed wire on arms that lean out to the section's back (-z). The same look as the engine's fenceRun, as a prop to place in the editor
+  function fenceSectionBuild(c) {
+    var F = fenceMats(), L = 3;
+    [-L / 2, L / 2].forEach(function (px) {
+      c.box(0.08, 2.5, 0.08, F.post, px, 1.25, 0); c.box(0.3, 0.25, 0.3, F.conc, px, 0.12, 0); c.box(0.12, 0.03, 0.12, F.post, px, 2.52, 0);
+      var arm = c.box(0.04, 0.6, 0.04, F.post, px, 2.82, -0.2); arm.rotation.set(0, Math.PI / 2, -0.7, 'YXZ');
+    });
+    var mp = c.plane(L - 0.1, 2.2, F.mesh, 0, 1.35, 0, 0, 0); mp.receiveShadow = false;
+    [0.75, 1.65].forEach(function (vy) { c.box(L - 0.1, 0.06, 0.03, F.post, 0, vy, 0); });
+    c.box(L, 0.3, 0.05, F.conc, 0, 0.15, 0); c.box(L, 0.03, 0.03, F.post, 0, 2.46, 0); c.box(L, 0.03, 0.03, F.post, 0, 0.32, 0);
+    [0, 1, 2].forEach(function (k) { var w = c.cyl(0.006, L, F.wire, 0, 2.62 + k * 0.17, -(0.22 + k * 0.14), 4); w.rotation.set(Math.PI / 2, Math.PI / 2, 0, 'YXZ'); });
+    c.solid(-L / 2 - 0.06, L / 2 + 0.06, -0.06, 0.06, 0, 2.6);
+  }
+  defProp('fenceSection', { extra: true, shop: false, label: 'fence section', cat: 'yard', yard: true, desc: 'A 3 m section of the forecourt fence with barbed wire. The wire leans out to the back: turn it to face the right way.', build: fenceSectionBuild });
   defProp('xPlanter', { extra: true, label: 'planter', cat: 'yard', yard: true, price: 40, desc: 'A tub of green by the door.', build: function (c) { c.box(0.6, 0.45, 0.6, MAT.grey, 0, 0.22, 0); c.sphere(0.3, std({ color: 0x4f7f3a, roughness: 1 }), 0, 0.65, 0); c.solid(-0.3, 0.3, -0.3, 0.3, 0, 0.9); } });
