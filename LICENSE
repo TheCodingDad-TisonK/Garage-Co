@@ -1,26 +1,24 @@
-MIT License
+Copyright (c) 2026 TheCodingDad-TisonK. All rights reserved.
 
-Copyright (c) 2026 TheCodingDad-TisonK
+Garage Co. (its code, art, sounds, text and installer, together "the Game") belongs to TheCodingDad-TisonK.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+What you may do
+- Download the released installer, install the Game and play it, for your own personal, non-commercial use.
+- Change your own installed copy for your own play: a mod you keep to yourself.
+- Read the source code in this repository.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+What you may not do without written permission from TheCodingDad-TisonK
+- Copy, re-upload, share, publish or distribute the Game or any part of it, changed or unchanged, including the installer and anything built from it.
+- Sell, rent or sublicense the Game or any part of it.
+- Use the Game's code, art, sounds or text to make another game or product.
+- Remove or change this notice.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+To ask for permission, open an issue on the GitHub repository, or write through https://www.patreon.com/cw/thecodingdad.
 
----
+Being able to read the source here does not give you a licence to use it. GitHub's terms let you view and fork this public repository on GitHub; they do not let you use the code outside GitHub.
 
-game/vendor/three/three.min.js is three.js r128, Copyright 2010-2021 Three.js
-Authors, MIT License. https://github.com/mrdoob/three.js
+Releases up to and including v0.2.1 were published under the MIT License, and copies received under it stay under it. Everything after v0.2.1 is under this licence.
+
+The Game includes third-party software under its own licences, among them three.js (MIT) and Electron (MIT); their notices apply to their parts.
+
+THE GAME IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE GAME OR ITS USE.

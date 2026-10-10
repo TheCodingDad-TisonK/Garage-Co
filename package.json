@@ -5,7 +5,7 @@
   "description": "Standalone hobby game, NOT a Farming Simulator product. A first-person car workshop on Co Engine: cars come in broken, you take the job, fix the fault and take the money.",
   "main": "main.js",
   "author": "TheCodingDad-TisonK",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "scripts": {
     "start": "electron .",

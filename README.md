@@ -34,4 +34,4 @@ Garage Co. is free and stays free. If you want to follow the work, there is a Pa
 
 ## Licence
 
-MIT. Made by TheCodingDad.
+All rights reserved. You may download and play the game for yourself; copying, sharing, selling or reusing it needs written permission. Releases up to v0.2.1 were MIT. See [LICENSE](LICENSE). Made by TheCodingDad.
