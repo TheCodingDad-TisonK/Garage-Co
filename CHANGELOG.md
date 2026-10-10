@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (2026-10-10): Small World Patch
+
+- Added more furniture inside the workshop
+- Added more fencing around the parking lot
+
 ## 0.2.0 (2026-10-09)
 
 - **The roll door panel.** A screen on the wall beside the roll door, inside the lock-up: open and close the door from it, see whether a car is coming, how the job stands and what it pays.

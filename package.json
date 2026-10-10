@@ -1,7 +1,7 @@
 {
   "name": "garage-co",
   "productName": "Garage Co",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Standalone hobby game, NOT a Farming Simulator product. A first-person car workshop on Co Engine: cars come in broken, you take the job, fix the fault and take the money.",
   "main": "main.js",
   "author": "TheCodingDad-TisonK",
