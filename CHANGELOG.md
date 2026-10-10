@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 (2026-10-10): World Update
+
+## Small patch for the outside world
+- Created several prop packs wich are included in the game
+- Added more streets, houses, and tree's
+- NPC Vehicles that drive trough the city
+
 ## 0.2.1 (2026-10-10): Small World Patch
 
 - Added more furniture inside the workshop
