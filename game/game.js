@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.9.1', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.9.4', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -1389,7 +1389,9 @@
   // ── World items ───────────────────────────────────────────────────
   // A key names an item by what it is and where the game built it ("lamp post@12,6", "mesh plane 34x19.2@0,13.6"), so it survives a
   // reload and most changes to the game's code. An edit is { x, y, z, ry (degrees), sx, sy, sz, hidden }, every field optional.
-  var WORLD_EDITS = {}, WORLD_ITEMS = [], WORLD_PARENT = null;
+  var WORLD_EDITS = {}, WORLD_ITEMS = [], WORLD_PARENT = null, WORLD_COPIES = [];
+  // copies of world items (0.9.4): { id, of (the original's key), x, y, z, ry (degrees), sx, sy, sz }, kept in src/00-world.js
+  CO.worldCopies = function (list) { (list || []).forEach(function (c) { if (c && c.id && c.of && !WORLD_COPIES.some(function (k) { return k.id === c.id; })) WORLD_COPIES.push(c); }); return WORLD_COPIES; };
   CO.world = function (edits) { if (edits && typeof edits === 'object') for (var k in edits) WORLD_EDITS[k] = edits[k]; return WORLD_EDITS; };
   // a kit call builds into a group of its own, centred on what it built and standing on the ground, so it turns and resizes about itself
   // a game marks an item movesOnly (o.userData.movesOnly = true) when its rules follow where it stands but not a turn or a new size
@@ -1468,10 +1470,26 @@
     o.scale.set(typeof e.sx === 'number' ? e.sx : b0.sx, typeof e.sy === 'number' ? e.sy : b0.sy, typeof e.sz === 'number' ? e.sz : b0.sz);
     o.visible = !e.hidden; o.updateMatrixWorld(true); worldSolids(o); shadowDirty = true;
   }
-  // after the build and before the bake: the saved edits laid on the world
-  function worldEditsApply() { worldScan(); WORLD_ITEMS.forEach(function (o) { var e = WORLD_EDITS[o.userData.worldKey]; if (e) worldLay(o, e); }); }
+  // after the build and before the bake: the saved edits laid on the world, then the copies built
+  function worldEditsApply() { worldScan(); WORLD_ITEMS.forEach(function (o) { var e = WORLD_EDITS[o.userData.worldKey]; if (e) worldLay(o, e); }); WORLD_COPIES.forEach(function (c) { worldCopyBuild(c); }); }
+  // a copy: the original's meshes cloned (they share its geometry and materials, so a copy costs little), its solids cloned and laid where
+  // the copy stands. What the original does (a door that opens, a prompt) stays with the original: a copy is its look and its solids
+  function worldCopyBuild(c) {
+    var src = worldByKey(c.of); if (!src) return null;
+    var keep = [], vis = []; src.traverse(function (o) { keep.push(o.userData); vis.push(o.userData && o.userData.bakedAway ? true : o.visible); o.userData = {}; });
+    var g; try { g = src.clone(true); } finally { var i0 = 0; src.traverse(function (o) { o.userData = keep[i0++]; }); }
+    var i1 = 0; g.traverse(function (o) { o.visible = vis[i1++]; });
+    g.visible = true; g.name = src.name; g.userData = { worldItem: src.userData.worldItem || null, worldKey: c.id, worldCopy: c, worldBase: src.userData.worldBase, worldSolidsBase: src.userData.worldSolidsBase || [] };
+    g.userData.solids = g.userData.worldSolidsBase.map(function (q) { var s = { x0: q.x0, x1: q.x1, z0: q.z0, z1: q.z1, y0: q.y0, y1: q.y1 }; solids.push(s); return s; });
+    (CO.root || scene).add(g); worldCopyLay(g); WORLD_ITEMS.push(g); return g;
+  }
+  function worldCopyLay(g) { var c = g.userData.worldCopy, b = g.userData.worldBase || { x: 0, y: 0, z: 0, ry: 0, sx: 1, sy: 1, sz: 1 }; g.position.set(num(c.x, b.x), num(c.y, b.y), num(c.z, b.z)); g.rotation.y = typeof c.ry === 'number' ? c.ry * Math.PI / 180 : b.ry; g.scale.set(num(c.sx, b.sx), num(c.sy, b.sy), num(c.sz, b.sz)); g.updateMatrixWorld(true); worldSolids(g); shadowDirty = true; }
+  function num(v, d) { return typeof v === 'number' ? v : d; }
+  // a copy removed: out of the scene, its solids gone, its record dropped
+  function worldCopyRemove(g) { var c = g.userData.worldCopy; if (g.parent) g.parent.remove(g); (g.userData.solids || []).forEach(function (s) { var k = solids.indexOf(s); if (k >= 0) solids.splice(k, 1); }); var a = WORLD_COPIES.indexOf(c); if (a >= 0) WORLD_COPIES.splice(a, 1); var b = WORLD_ITEMS.indexOf(g); if (b >= 0) WORLD_ITEMS.splice(b, 1); if (typeof NAV === 'object' && NAV) NAV.dirty = true; shadowDirty = true; }
   // what the editor keeps: the item as it stands now against where the game built it
   function worldRecord(o) {
+    if (o.userData.worldCopy) { var c = o.userData.worldCopy; c.x = wr(o.position.x); c.y = wr(o.position.y); c.z = wr(o.position.z); c.ry = Math.round(o.rotation.y * 180 / Math.PI * 10) / 10; c.sx = wr(o.scale.x); c.sy = wr(o.scale.y); c.sz = wr(o.scale.z); worldSolids(o); return c; }
     var b0 = o.userData.worldBase, key = o.userData.worldKey; if (!b0 || !key) return null;
     var e = {}, near = function (a, b) { return Math.abs(a - b) < 0.0005; };
     if (!near(o.position.x, b0.x)) e.x = wr(o.position.x); if (!near(o.position.y, b0.y)) e.y = wr(o.position.y); if (!near(o.position.z, b0.z)) e.z = wr(o.position.z);
@@ -1483,10 +1501,12 @@
   }
   // the part the editor writes: src/00-world.js, or nothing when the world stands as the game builds it
   function worldCode() {
-    var keys = Object.keys(WORLD_EDITS).sort(); if (!keys.length) return '';
-    var lines = ['//@ the world the editor changed: what was moved, turned, resized or removed of what the game builds straight into its world. Written by the Co Engine editor; it sorts first in src/ and is laid on the world as it is built. A key is the thing and where the game built it; delete a line to put that thing back.', '  CO.world({'];
-    keys.forEach(function (k) { lines.push('    ' + JSON.stringify(k) + ': ' + JSON.stringify(WORLD_EDITS[k]).replace(/"(\w+)":/g, '$1: ').replace(/,(?=\w+: )/g, ', ').replace(/^\{/, '{ ').replace(/\}$/, ' }') + ','); });
-    lines.push('  });'); return lines.join('\n') + '\n';
+    var keys = Object.keys(WORLD_EDITS).sort(); if (!keys.length && !WORLD_COPIES.length) return '';
+    var obj = function (o) { return JSON.stringify(o).replace(/"(\w+)":/g, '$1: ').replace(/,(?=\w+: )/g, ', ').replace(/^\{/, '{ ').replace(/\}$/, ' }'); };
+    var lines = ['//@ the world the editor changed: what was moved, turned, resized, removed or copied of what the game builds straight into its world. Written by the Co Engine editor; it sorts first in src/ and is laid on the world as it is built. A key is the thing and where the game built it; delete a line to put that thing back, or to take a copy away.'];
+    if (keys.length) { lines.push('  CO.world({'); keys.forEach(function (k) { lines.push('    ' + JSON.stringify(k) + ': ' + obj(WORLD_EDITS[k]) + ','); }); lines.push('  });'); }
+    if (WORLD_COPIES.length) { lines.push('  CO.worldCopies(['); WORLD_COPIES.forEach(function (c) { lines.push('    ' + obj(c) + ','); }); lines.push('  ]);'); }
+    return lines.join('\n') + '\n';
   }
   // ── Meshes ────────────────────────────────────────────────────────
   var CAR_COLS = [0xb8322a, 0x2c5f9e, 0xd8dbdf, 0x2a2d33, 0x7a8691, 0xe0a02a, 0x4f6a3a];
@@ -2386,6 +2406,34 @@
     GD.items.forEach(function (it) { it.g.position.x += +dx || 0; it.g.position.z += +dz || 0; });
     return 'moved ' + editorGroupCommit(GD);
   }
+  // ── duplicate, copy, paste (0.9.4) ──
+  // Duplicate makes a copy of every selected prop and world item, 1.5 m along, and selects the copies; Paste does the same at the point
+  // the camera looks at, keeping the group's arrangement. A prop copy is a placed copy (the layout keeps it); a world item's copy is a
+  // world copy (src/00-world.js keeps it). One undo step takes them all away.
+  var editorClip = [];
+  function editorDuplicate(ids, at) {
+    ids = (ids && ids.length ? ids : editorMulti).filter(function (k) { return !!eobj(k); }); if (!ids.length) return { error: 'nothing selected to duplicate' };
+    var spots = ids.map(function (k) { if (propInst[k]) { var P = propPlacement(k); return { x: P.x, z: P.z }; } var o = eobj(k); return { x: o.position.x, z: o.position.z }; });
+    var cx = spots.reduce(function (s, p) { return s + p.x; }, 0) / spots.length, cz = spots.reduce(function (s, p) { return s + p.z; }, 0) / spots.length;
+    var dx = at ? at.x - cx : 1.5, dz = at ? at.z - cz : 1.5, made = [], refused = [], snap = function (v) { return Math.round(v * 20) / 20; };
+    if (!S.custom) S.custom = [];
+    ids.forEach(function (k, i) {
+      if (propInst[k]) { var src = customById(k) || placedById(k), type = src ? src.type : (PROPS[k] ? k : null), P = propPlacement(k); if (!type) return; var c = { id: uid('cp'), type: type, x: snap(spots[i].x + dx), z: snap(spots[i].z + dz), rot: P.rot || 0, h: P.h || 0 }; S.custom.push(c); buildProp(c.id); made.push({ prop: c, id: c.id }); return; }
+      var o = eobj(k); if (!o || !o.userData.worldKey) return; if (o.userData.movesOnly) { refused.push(worldName(o)); return; }
+      var rec = { id: uid('wc'), of: o.userData.worldCopy ? o.userData.worldCopy.of : o.userData.worldKey, x: wr(o.position.x + dx), y: wr(o.position.y), z: wr(o.position.z + dz), ry: Math.round(o.rotation.y * 180 / Math.PI * 10) / 10, sx: wr(o.scale.x), sy: wr(o.scale.y), sz: wr(o.scale.z) };
+      WORLD_COPIES.push(rec); var g = worldCopyBuild(rec); if (g) made.push({ world: rec, id: eid(g) }); else { WORLD_COPIES.splice(WORLD_COPIES.indexOf(rec), 1); refused.push(worldName(o)); }
+    });
+    if (!made.length) return { error: refused.length ? refused.join(', ') + ' cannot be copied (it moves only)' : 'nothing to copy' };
+    save();
+    var undo = function () { made.forEach(function (m) { if (m.prop) { var a = S.custom.indexOf(m.prop); if (a >= 0) S.custom.splice(a, 1); removePropInst(m.prop.id); } else { var g = worldByKey(m.world.id); if (g) worldCopyRemove(g); } }); editorSelect(null); save(); };
+    var redo = function () { made.forEach(function (m) { if (m.prop) { S.custom.push(m.prop); buildProp(m.prop.id); } else { WORLD_COPIES.push(m.world); var g = worldCopyBuild(m.world); if (g) m.id = eid(g); } }); save(); };
+    histPush((at ? 'paste ' : 'duplicate ') + made.length + (made.length === 1 ? ' thing' : ' things'), undo, redo);
+    editorMulti = made.map(function (m) { return m.id; }); editorSel = editorMulti[editorMulti.length - 1]; editorHelpersShow();
+    console.log('[co-editor] ' + JSON.stringify({ select: editorSel, selection: editorMulti.slice(), duplicated: made.length }));
+    return { ok: true, made: editorMulti.slice(), refused: refused };
+  }
+  function editorCopy(ids) { editorClip = (ids && ids.length ? ids : editorMulti).filter(function (k) { return !!eobj(k); }); return { ok: true, copied: editorClip.length }; }
+  function editorPaste() { if (!editorClip.length) return { error: 'nothing copied: select something and press Ctrl+C first' }; var a = aheadPoint(6); return editorDuplicate(editorClip, { x: a.x, z: a.z }); }
   function editorRemoveSel() { var ids = editorMulti.slice(), out = ids.map(function (k) { return editorRemove(k); }); editorSelect(null); return out; }
   // what the crosshair or a click is on: the nearest visible mesh, named as its prop when it belongs to one
   function editorPick(nx, ny) {
@@ -2410,6 +2458,7 @@
     var c = customById(id);
     if (c) { var at = S.custom.indexOf(c); S.custom.splice(at, 1); removePropInst(id); save(); if (editorSel === id) editorSelect(null); histPush('remove ' + c.type, function () { S.custom.splice(Math.min(at, S.custom.length), 0, c); buildProp(c.id); save(); }, function () { var i = S.custom.indexOf(c); if (i >= 0) S.custom.splice(i, 1); removePropInst(c.id); if (editorSel === c.id) editorSelect(null); save(); }); return 'removed ' + id; }
     if (propInst[id]) { var before = layoutSnap(id); if (!S.layout) S.layout = {}; S.layout[id] = S.layout[id] || {}; S.layout[id].hidden = true; buildProp(id); save(); if (editorSel === id) editorSelect(null); var after = layoutSnap(id); histPush('hide ' + id, function () { layoutRestore(id, before); }, function () { layoutRestore(id, after); }); return 'hidden ' + id + ' (the catalogue brings it back)'; }
+    var wc = eobj(id); if (wc && wc.userData.worldCopy) { var rec = wc.userData.worldCopy; worldCopyRemove(wc); if (editorSel === id) editorSelect(null); histPush('remove a copy of ' + worldName(wc), function () { WORLD_COPIES.push(rec); worldCopyBuild(rec); }, function () { var g = worldByKey(rec.id); if (g) worldCopyRemove(g); }); return 'removed a copy of ' + worldName(wc); }
     var wo = eobj(id); if (wo && wo.userData.worldKey) { if (baked.meshes.length) unbakeStatic(); wo.visible = false; worldRecord(wo); if (editorSel === id) editorSelect(null); shadowDirty = true; histPush('remove ' + worldName(wo), function () { wo.visible = true; worldRecord(wo); shadowDirty = true; }, function () { wo.visible = false; worldRecord(wo); shadowDirty = true; }); return 'removed ' + worldName(wo) + ' (kept in src/00-world.js; Put it back in the inspector or Ctrl+Z brings it back)'; }
     var o = eobj(id); if (!o) return 'no such object ' + id; var par = o.parent; if (par) par.remove(o); if (editorSel === id) editorSelect(null); shadowDirty = true;
     histPush('remove ' + eName(o), function () { if (par) { par.add(o); shadowDirty = true; } }, function () { if (o.parent) o.parent.remove(o); if (editorSel === id) editorSelect(null); shadowDirty = true; });
@@ -2511,7 +2560,7 @@
     canvas.addEventListener('contextmenu', function (e) { if (CO.editor.on) e.preventDefault(); });
     // Ctrl and the wheel turn the prop under the pointer (or the selected one) a quarter at a time
     canvas.addEventListener('wheel', function (e) { if (!CO.editor.on || !ui.started || !(e.ctrlKey || e.metaKey)) return; e.preventDefault(); e.stopImmediatePropagation(); var r2 = canvas.getBoundingClientRect(), wx = ((e.clientX - r2.left) / r2.width) * 2 - 1, wy = -((e.clientY - r2.top) / r2.height) * 2 + 1, hw = editorPick(wx, wy), id = hw && hw.prop && propInst[hw.id] ? hw.id : hw && hw.world ? hw.id : editorSel; var wt = id && !propInst[id] ? eobj(id) : null; if (wt && wt.userData.worldKey) { var ry0 = wt.rotation.y * 180 / Math.PI; editorSet(id, 'rotation.y', Math.round(ry0 + (e.deltaY > 0 ? -90 : 90))); editorSelect(id); return; } if (!id || !propInst[id]) return; var dw = propDef(id); if (dw && dw.fixed) return; var rot = propPlacement(id).rot || 0; editorSet(id, 'prop.rot', (rot + (e.deltaY > 0 ? 1 : 3)) % 4); editorSelect(id); console.log('[co-editor] ' + JSON.stringify({ moved: id, rot: (rot + (e.deltaY > 0 ? 1 : 3)) % 4 })); }, { capture: true, passive: false });
-    window.addEventListener('keydown', function (e) { if (!CO.editor.on || !(e.ctrlKey || e.metaKey)) return; var k = (e.key || '').toLowerCase(); if (k === 'z' && !e.shiftKey) { e.preventDefault(); console.log('[co-editor] ' + JSON.stringify({ history: editorUndoStep() })); } else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); console.log('[co-editor] ' + JSON.stringify({ history: editorRedoStep() })); } });
+    window.addEventListener('keydown', function (e) { if (!CO.editor.on || !(e.ctrlKey || e.metaKey)) return; var k = (e.key || '').toLowerCase(); if (k === 'd' || k === 'c' || k === 'v') { e.preventDefault(); var rk = k === 'd' ? editorDuplicate() : k === 'c' ? editorCopy() : editorPaste(); console.log('[co-editor] ' + JSON.stringify({ clip: k, result: rk && (rk.error || rk.made || rk.copied) })); return; } if (k === 'z' && !e.shiftKey) { e.preventDefault(); console.log('[co-editor] ' + JSON.stringify({ history: editorUndoStep() })); } else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); console.log('[co-editor] ' + JSON.stringify({ history: editorRedoStep() })); } });
   }
   // ── Undo and redo: a stack of steps, each one knowing how to undo and redo itself ──
   // The editor's own edits are steps (a prop field, a live field, a spawn, a remove); the game's build mode is play, not editing, and is not.
@@ -2683,7 +2732,7 @@
     tables: tablesList, tableSet: tableSet, tablesCode: tablesCode, uiCode: uiCode, uiOpen: function (kind) { openPanel(kind); return !!UI.panels[kind]; }, uiEval: uiEval,
     packCode: function (types) { var ids = (types && types.length ? types : PROP_ORDER.filter(function (id) { return !/^pk[A-Z]/.test(id); })).filter(function (id) { return PROPS[id] && PROPS[id].build; }); var lines = ['//@ a pack made in the Co Engine editor from ' + (CO.game && CO.game.handle || 'a game') + '\'s props. A prop that calls the game\'s own functions needs them in the game it goes to.']; ids.forEach(function (id) { var d = PROPS[id], f = {}; ['label', 'cat', 'wall', 'fixed', 'price', 'desc', 'lvl', 'ico', 'noBlob'].forEach(function (k) { if (d[k] !== undefined) f[k] = d[k]; }); f.extra = true; f.shop = false; var body = JSON.stringify(f); lines.push('  defProp(' + JSON.stringify(id) + ', Object.assign(' + body + ', { build: ' + d.build.toString() + (d.after ? ', after: ' + d.after.toString() : '') + ' }));'); }); return { ids: ids, code: lines.join('\n') + '\n' }; },
     run: function (code) { var r = closureRun(String(code)); try { return r === undefined ? null : JSON.parse(JSON.stringify(r)); } catch (e) { return String(r); } },
-    model: modelOf, modelPreview: modelPreview, modelStart: modelStart, modelPick: modelPick, modelMirror: modelMirror, modelCode: modelCode, modelConvert: modelConvert, worldCode: worldCode, selection: function () { return editorMulti.slice(); }, selectMany: function (ids) { editorMulti = (ids || []).filter(function (k) { return !!eobj(k); }); editorSel = editorMulti[editorMulti.length - 1] || null; editorHelpersShow(); return editorMulti.slice(); }, moveSel: editorMoveSel, removeSel: editorRemoveSel, worldItems: function () { return WORLD_ITEMS.map(function (o) { return { id: eid(o), key: o.userData.worldKey, name: worldName(o), hidden: !o.visible }; }); },
+    model: modelOf, modelPreview: modelPreview, modelStart: modelStart, modelPick: modelPick, modelMirror: modelMirror, modelCode: modelCode, modelConvert: modelConvert, worldCode: worldCode, selection: function () { return editorMulti.slice(); }, duplicate: editorDuplicate, copy: editorCopy, paste: editorPaste, worldCopies: function () { return WORLD_COPIES.slice(); }, selectMany: function (ids) { editorMulti = (ids || []).filter(function (k) { return !!eobj(k); }); editorSel = editorMulti[editorMulti.length - 1] || null; editorHelpersShow(); return editorMulti.slice(); }, moveSel: editorMoveSel, removeSel: editorRemoveSel, worldItems: function () { return WORLD_ITEMS.map(function (o) { return { id: eid(o), key: o.userData.worldKey, name: worldName(o), hidden: !o.visible }; }); },
     physics: physicsState, bodyAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var B = body(o, opt || {}); return { ok: true, id: B.id, size: [B.hx * 2, B.hy * 2, B.hz * 2] }; }, bodyRemove: function (id) { var o = eobj(id); return !!o && removeBody(o); }, impulse: function (id, vx, vy, vz) { var o = eobj(id); return !!o && impulse(o, vx, vy, vz); },
     springAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var S2 = spring(o, opt || {}); return { ok: true, anchor: S2.anchor, k: S2.k }; }, springRemove: function (id) { var o = eobj(id); return !!o && unspring(o); },
     drop: editorDrop, hingeAdd: function (id, opt) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var H = hinge(o, opt || {}); return { ok: true, pivot: H.pivot, length: H.length, axis: H.axis }; }, hingeRemove: function (id) { var o = eobj(id); return !!o && removeHinge(o); },
