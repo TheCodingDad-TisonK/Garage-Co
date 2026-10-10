@@ -14,7 +14,10 @@ module.exports = `
   const LO = T.LO(); ok(!!T.G.rollPanel && S.doorOpen === false && T.GAME.collides(LO.x, LO.z + T.LOCKUP.z) === true && T.GAME.collides(LO.x, LO.z) === false, 'the roll door is down and blocks the doorway (the lock-up stands at ' + LO.x + ',' + LO.z + ')');
   S.doorOpen = true; ok(T.GAME.collides(LO.x, LO.z + T.LOCKUP.z) === false, 'an open roll door lets you through'); T.tickRoll(2); ok(T.G.rollPanel.scale.y < 0.5, 'the panel rolled up: scale ' + T.G.rollPanel.scale.y.toFixed(2)); S.doorOpen = false;
   ok(T.navFreeAt(LO.x, LO.z) && T.navFreeAt(LO.x, LO.z + T.LOCKUP.z) && T.navFreeAt(T.BAY.x + 2, T.BAY.z) && !T.navFreeAt(LO.x - T.LOCKUP.x, LO.z) && !T.navFreeAt(0, 40), 'the route finder walks the lock-up, the doorway and the forecourt, not the walls or the far road');
-  ok(T.traffic.cars.length === 2, 'two cars on the road');
+  ok(T.traffic.cars.length === 2 && T.traffic.cars.every((c) => c.road), 'two cars on the road, on the engine road network');
+  { const at0 = T.traffic.cars.map((c) => [c.g.position.x, c.g.position.z]); await wait(1500); const at1 = T.traffic.cars.map((c) => [c.g.position.x, c.g.position.z]);
+    const drove = at0.map((p, i) => { const dx = at1[i][0] - p[0], side = at1[i][1] - T.ROAD_Z; return Math.abs(dx) > 3 && Math.abs(Math.abs(side) - 1.75) < 1.2 && (side > 0 ? dx > 0 : dx < 0); });
+    ok(drove.every(Boolean), 'both cars drive along the road, each in its own lane and direction: ' + JSON.stringify(at1.map((q) => q.map((v) => Math.round(v * 10) / 10)))); }
   // a car comes in
   const car = T.spawnCar(); ok(!!car && S.job && S.job.state === 'coming' && !!T.car() && T.car().x < -60, 'a car is on the way: ' + car.name + ' in a ' + car.make + ' with ' + car.fault);
   T.run(18); ok(S.job.state === 'waiting' && Math.abs(T.car().x - T.BAY.x) < 0.01 && Math.abs(T.car().z - T.BAY.z) < 0.01, 'the car parked in the bay: ' + T.car().x.toFixed(1) + ',' + T.car().z.toFixed(1));

@@ -88,7 +88,8 @@
     // (placed in src/00-layout.js), so it moves, goes and grows in the editor like anything else
     tree(-20, 10, 1.2); tree(21, 18, 0.9); tree(-9, -8, 1.0); lampPost(12, 6, 0, 5);
     buildSky({ clouds: 6, rainN: 2500, snowN: 1200 });
-    traffic.x0 = -90; traffic.x1 = 90; trafficAdd(ROAD_Z + LANE, 1, 9); trafficAdd(ROAD_Z - LANE, -1, 8);
+    // the road is a lane each way on the engine's road network: road pieces laid off either end join it, and its two cars drive on
+    roadLane([[-90, ROAD_Z + LANE], [90, ROAD_Z + LANE]]); roadLane([[90, ROAD_Z - LANE], [-90, ROAD_Z - LANE]]); roadTraffic({ cars: 2, speed: 8.5 });
     buildProps();
     navSetup({ x0: -PLOT.x, z0: PLOT.z0, width: 2 * PLOT.x, depth: PLOT.z1 - PLOT.z0 + 2, cell: 0.4 });
   };
