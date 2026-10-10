@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.11.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.12.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -1939,6 +1939,7 @@
     SAVE = named ? prefix + '-' + named[1] : prefix + '-slot' + BOOT_SLOT; SETTINGS_KEY = cfg.settingsKey || prefix + '-settings';
     BOOT_SAVE = (function () { try { var raw = localStorage.getItem(SAVE), s = raw ? JSON.parse(raw) : null; return s && typeof s === 'object' ? s : null; } catch (e) { return null; } })();
     SET = {}; for (var k in SET_DEFAULTS) SET[k] = SET_DEFAULTS[k]; if (cfg.settings) for (var k2 in cfg.settings) SET[k2] = cfg.settings[k2];
+    menusSettingDefaults();   // part 46: the menu maker's own settings, so the saved values of them load too
     loadSettings();
     CO.save = { prefix: prefix, key: SAVE, slot: BOOT_SLOT, named: named ? named[1] : null };
   }
@@ -2016,6 +2017,7 @@
   function renderPanel() {
     if (!ui.panelOpen) return;
     var spec = panel.kind === 'catalogue' ? { title: 'Catalogue · build mode', tabs: [], body: catalogueHtml() } : (CO.game && CO.game.panel ? CO.game.panel(panel.kind, panel.tab) : null);
+    if (!spec && panel.kind === 'npc') spec = npcPanelSpec();   /* part 47: an NPC's words and choices */
     if (!spec) spec = uiPanelSpec(panel.kind);   /* a panel the editor's UI tab described */
     if (!spec) spec = { title: panel.kind || '', tabs: [], body: '' };
     if (spec.tab && spec.tab !== panel.tab) panel.tab = spec.tab;
@@ -2028,6 +2030,7 @@
     if (panel.kind === 'catalogue' && act === 'restore') { editRestore(arg); renderPanel(); return true; }
     if (panel.kind === 'catalogue' && act === 'buy') { closePanel(); editBuy(arg); return true; }   // only the catalogue's: a game's shop has a buy of its own
     if (act === 'ui') return uiPanelAct(arg);
+    if (act === 'npc') return npcChoice(arg);
     if (CO.game && CO.game.panelAct && CO.game.panelAct(act, arg)) return true;
     runHooks('panelAct', act, arg); return false;
   }
@@ -2070,10 +2073,13 @@
     else if (k === 'import') { try { var s = JSON.parse($('dc-save-ta').value); if (!s || typeof s !== 'object' || (CO.game && CO.game.saveLooksRight && !CO.game.saveLooksRight(s))) throw new Error('not a save'); wiped = true; localStorage.setItem(SAVE, JSON.stringify(s)); sessionFlag('skip-splash'); sessionFlag('autoplay'); location.reload(); } catch (err) { toast('That is not a save of this game.', 'bad'); } }   // wiped: the unload autosave must not write the old game back over the import
     else if (k === 'reset') { if (b && b.getAttribute('data-sure') !== '1') { b.setAttribute('data-sure', '1'); b.textContent = 'Really reset slot ' + BOOT_SLOT + '? Click again'; setTimeout(function () { b.removeAttribute('data-sure'); b.textContent = '⟲ Reset this save'; }, 3000); return; } wipe(); sessionFlag('skip-splash'); location.reload(); }
     else if (k === 'quit') { save(); sessionFlag('skip-splash'); location.reload(); }
+    else if (k.indexOf('page:') === 0) menuBody(menusPageHtml(k.slice(5)));
+    else if (k.indexOf('mm:') === 0) menusPauseAct(+k.slice(3), b);
     else if (CO.game && CO.game.menu) CO.game.menu(k, b);
   }
   // ── Settings ──────────────────────────────────────────────────────
   function settingsHtml() {
+    if (MENUS.settings) return '<div class="dc-form">' + menusSettingRows() + (CO.game && CO.game.settingsHtml ? CO.game.settingsHtml() : '') + '</div>';   // part 46: the settings the menu maker chose
     return '<div class="dc-form">' +
       '<label><span>Mouse sensitivity</span><input type="range" min="0.3" max="2.5" step="0.1" value="' + SET.sens + '" data-set="sens"></label>' +
       '<label><span>Invert Y</span><input type="checkbox" ' + (SET.invertY ? 'checked' : '') + ' data-set="invertY"></label>' +
@@ -2091,7 +2097,7 @@
     var k = el.getAttribute('data-set'); if (!k) return;
     var v = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : +el.value;
     if (!(k in SET)) { if (CO.game && CO.game.setting) CO.game.setting(k, v); hudDirty = true; return; }
-    SET[k] = v; saveSettings(); applySettings();
+    SET[k] = v; saveSettings(); applySettings(); if (menusCustomKey(k) && CO.game && CO.game.setting) CO.game.setting(k, v);
   }
   function applySettings() {
     if (!renderer) return;
@@ -2354,6 +2360,334 @@
     if (!any) return '';
     return '//@ the tuning the editor saved: changes to the game\'s tables (prices, the economy, the ladder) over what the code says. Written by the Co Engine editor\'s Settings tab; it sorts first in src/ and applies as each table registers.\n  CO.tune(' + JSON.stringify(out, null, 2).replace(/\n/g, '\n  ') + ');\n';
   }
+  // ── Menus as data ─────────────────────────────────────────────────
+  // theme:    { accent, panel, text, muted, font, radius, dim, align: 'center' | 'left', width, layout: 'stack' | 'row', image }
+  // start:    { title, subtitle, logo, chips, note, buttons: [{ label, action, primary }] }      image (in theme) is the start backdrop
+  // pause:    { title, line, buttons: [{ label, action, primary }] }
+  // settings: { hide: ['fov', ...], custom: [{ key, label, type: 'toggle' | 'slider' | 'select', min, max, step, options, value }] }
+  // pages:    { name: { title, text } }                                   text is paragraphs and '- ' lists, as in the UI tab
+  // An action is one of the engine's: on the start screen play, new, settings, guide, slots, quit; in the pause menu resume,
+  // settings, guide, stats, saves, edit, devlink, reset, quit; on both 'page <name>'. Anything else is a dev command or an
+  // expression over the kit, as a UI panel button's is. A custom setting lives in SET with the engine's (SET.difficulty), is
+  // kept with them, and reaches GAME.setting(key, value) and the 'settings' hook when it changes; setting(key) reads one.
+  var MENUS = { theme: {}, start: null, pause: null, settings: null, pages: {} };
+  var MENU_THEME = { accent: '#f5b53d', panel: '#121a24', text: '#eef1f5', muted: '#a0acb8', font: 'Bahnschrift, "Segoe UI", Arial, sans-serif', radius: 12, dim: 0.72, align: 'center', width: 440, layout: 'stack', image: '' };
+  var MENU_SETTINGS = [['sens', 'Mouse sensitivity'], ['invertY', 'Invert Y'], ['fov', 'Field of view'], ['bob', 'Head bob while walking'], ['quality', 'Quality'], ['sound', 'Sound'], ['vol', 'Volume'], ['film', 'Film look (vignette, grain)'], ['fps', 'Show FPS (F3)']];
+  var MENU_ACTIONS = { start: ['play', 'new', 'settings', 'guide', 'slots', 'quit'], pause: ['resume', 'settings', 'guide', 'stats', 'saves', 'edit', 'devlink', 'reset', 'quit'] };
+  CO.menus = function (data) {
+    if (data === undefined) return menusData();
+    data = JSON.parse(JSON.stringify(data || {}));
+    MENUS = { theme: data.theme || {}, start: data.start || null, pause: data.pause || null, settings: data.settings || null, pages: data.pages || {} };
+    if (SET) menusSettingDefaults();
+    menusRender(); return menusData();
+  };
+  function menusOn() { return !!(MENUS.start || MENUS.pause || MENUS.settings); }
+  function menusData() { return JSON.parse(JSON.stringify(MENUS)); }
+  function setting(key) { return SET ? SET[key] : undefined; }
+  function menusTheme() { var t = {}, k; for (k in MENU_THEME) t[k] = MENU_THEME[k]; for (k in MENUS.theme || {}) if (MENUS.theme[k] !== '' && MENUS.theme[k] !== null && MENUS.theme[k] !== undefined) t[k] = MENUS.theme[k]; return t; }
+  // a custom setting's starting value, put in SET before the saved settings load so they keep it
+  function menusSettingDefaults() { ((MENUS.settings && MENUS.settings.custom) || []).forEach(function (c) { if (!c || !c.key || (c.key in SET)) return; SET[c.key] = c.value !== undefined ? c.value : c.type === 'toggle' ? false : c.type === 'slider' ? (c.min || 0) : (c.options && c.options[0]) || ''; }); }
+  function menusRgba(hex, a) { var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return 'rgba(245,181,61,' + a + ')'; var n = parseInt(m[1], 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+  function menusStyle() {
+    var t = menusTheme(), el = $('co-mm-style'); if (!el) { el = document.createElement('style'); el.id = 'co-mm-style'; document.head.appendChild(el); }
+    var r = Math.max(0, +t.radius || 0), br = Math.max(0, r - 4), dim = 'rgba(5,8,12,' + (+t.dim) + ')', left = t.align === 'left';
+    el.textContent = '.co-mm { --panel: ' + t.panel + '; --text: ' + t.text + '; --muted: ' + t.muted + '; --amber: ' + t.accent + '; --line: rgba(255,255,255,0.1); font-family: ' + t.font + '; color: var(--text); }' +
+      '#dc-start.co-mm { background: ' + (t.image ? 'linear-gradient(' + dim + ',' + dim + '), url("' + String(t.image).replace(/"/g, '') + '") center / cover no-repeat' : dim) + '; justify-content: ' + (left ? 'flex-start' : 'center') + '; ' + (left ? 'padding-left: 7vw;' : '') + ' }' +
+      '#dc-menu.co-mm { background: ' + dim + '; justify-content: ' + (left ? 'flex-start' : 'center') + '; ' + (left ? 'padding-left: 7vw;' : '') + ' }' +
+      '.co-mm .co-mm-card { background: var(--panel); border: 1px solid var(--line); border-radius: ' + r + 'px; padding: 26px 30px; width: min(' + (+t.width || 440) + 'px, 92vw); max-width: none; min-width: 0; max-height: 88vh; overflow: auto; box-sizing: border-box; text-align: ' + (left ? 'left' : 'center') + '; box-shadow: 0 18px 60px rgba(0,0,0,0.45); }' +
+      '.co-mm .co-mm-logo { max-width: 60%; max-height: 120px; margin: 0 0 10px; }' +
+      '.co-mm h1.co-mm-title { margin: 0 0 4px; font-size: 32px; letter-spacing: 0.02em; } .co-mm h2.co-mm-title { margin: 0 0 4px; font-size: 22px; }' +
+      '.co-mm .co-mm-subtitle { margin: 0 0 6px; color: var(--muted); font-size: 15px; }' +
+      '.co-mm #dc-start-stats { display: flex; gap: 6px; flex-wrap: wrap; justify-content: ' + (left ? 'flex-start' : 'center') + '; margin: 10px 0 0; } .co-mm #dc-start-stats span { background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: ' + br + 'px; padding: 3px 9px; font-size: 12.5px; }' +
+      '.co-mm .co-mm-btns { display: flex; flex-direction: ' + (t.layout === 'row' ? 'row' : 'column') + '; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: ' + (left ? 'flex-start' : 'center') + '; }' +
+      '.co-mm .co-mm-btns button, .co-mm .co-mm-body button { padding: 10px 16px; margin: 0; border: 1px solid var(--line); border-radius: ' + br + 'px; background: rgba(255,255,255,0.06); color: var(--text); font: inherit; font-size: 15px; cursor: pointer; text-align: inherit; }' +
+      '.co-mm .co-mm-btns button:hover, .co-mm .co-mm-body button:hover { border-color: ' + menusRgba(t.accent, 0.7) + '; }' +
+      '.co-mm button.primary { background: ' + menusRgba(t.accent, 0.16) + '; border-color: ' + menusRgba(t.accent, 0.5) + '; color: var(--amber); }' +
+      '.co-mm .co-mm-body { margin-top: 14px; text-align: left; } .co-mm .co-mm-body .dc-form label { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }' +
+      '.co-mm .co-mm-slot { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; } .co-mm .co-mm-slot small { color: var(--muted); }';
+  }
+  function menusButtons(list, attr) { return (list || []).map(function (b, i) { return '<button ' + attr + '="' + i + '"' + (b.primary ? ' class="primary"' : '') + '>' + esc(b.label || 'Button') + '</button>'; }).join(''); }
+  function menusRender() {
+    if (typeof document === 'undefined' || !document.body) return;
+    menusStyle();
+    var st = $('dc-start');
+    if (MENUS.start) {
+      if (!st) { st = document.createElement('div'); st.id = 'dc-start'; st.className = 'dc-overlay'; document.body.appendChild(st); }
+      var s = MENUS.start, keepStats = $('dc-start-stats'), keepNote = $('dc-start-note'), stats = keepStats ? keepStats.innerHTML : '', note = keepNote ? keepNote.textContent : '';
+      st.classList.add('co-mm'); st.classList.remove('dim');
+      st.innerHTML = '<div class="co-mm-card">' + (s.logo ? '<img class="co-mm-logo" src="' + esc(s.logo) + '" alt="">' : '') + '<h1 class="co-mm-title">' + esc(s.title || document.title || 'A new game') + '</h1>' + (s.subtitle ? '<p class="co-mm-subtitle">' + esc(s.subtitle) + '</p>' : '') +
+        '<p id="dc-start-stats"' + (s.chips === false ? ' hidden' : '') + '>' + stats + '</p><p id="dc-start-note" class="dc-sub"' + (s.note === false ? ' hidden' : '') + '>' + esc(note) + '</p>' +
+        '<div class="co-mm-btns" id="co-mm-start-btns">' + menusButtons(s.buttons, 'data-start') + '</div><div class="co-mm-body" id="co-mm-start-body" hidden></div></div>';
+      if (!st.coMenusBound) { st.coMenusBound = true; st.addEventListener('click', menusStartClick); st.addEventListener('input', function (e) { settingInput(e.target); }); }
+    } else if (st) st.classList.remove('co-mm');
+    var mn = $('dc-menu');
+    if (MENUS.pause && mn) {
+      var p = MENUS.pause, line = $('dc-menu-sub');
+      mn.classList.add('co-mm'); mn.classList.remove('dim');
+      mn.innerHTML = '<div class="dc-menu-card co-mm-card"><h2 class="co-mm-title">' + esc(p.title || 'Paused') + '</h2><p class="dc-sub" id="dc-menu-sub"' + (p.line === false ? ' hidden' : '') + '>' + (line ? esc(line.textContent) : '') + '</p>' +
+        '<div class="dc-menu-btns co-mm-btns">' + (p.buttons || []).map(function (b, i) { var a = String(b.action || '').trim(), key = MENU_ACTIONS.pause.indexOf(a) >= 0 ? a : /^page\s+\S/.test(a) ? 'page:' + a.slice(5).trim() : 'mm:' + i; return '<button data-menu="' + esc(key) + '"' + (key === 'devlink' ? ' id="dc-m-devlink"' : '') + (b.primary ? ' class="primary"' : '') + '>' + esc(b.label || 'Button') + '</button>'; }).join('') + '</div>' +
+        '<div id="dc-menu-body" class="co-mm-body" hidden></div></div>';
+      var body = $('dc-menu-body'); if (body && !body.coMenusBound) { body.coMenusBound = true; body.addEventListener('input', function (e) { settingInput(e.target); }); }
+    } else if (mn) mn.classList.remove('co-mm');
+  }
+  // the start screen's own body: settings, a page, the guide or the slots, with a way back to the buttons
+  function menusStartBody(html) { var b = $('co-mm-start-body'), bs = $('co-mm-start-btns'); if (!b) return; if (html === null) { b.hidden = true; if (bs) bs.hidden = false; return; } b.innerHTML = '<div style="margin:0 0 10px"><button data-start-back="1" class="primary">← Back</button></div>' + html; b.hidden = false; if (bs) bs.hidden = true; }
+  function menusPageHtml(name) { var pg = MENUS.pages && MENUS.pages[name]; return pg ? (pg.title ? '<h3 style="margin:0 0 8px">' + esc(pg.title) + '</h3>' : '') + '<div class="dc-how">' + uiTextHtml(pg.text) + '</div>' : '<p>No page called ' + esc(name) + '.</p>'; }
+  function menusSlotsHtml() {
+    var n = (CO.cfg && CO.cfg.slots) || 3, h = '<p class="dc-sub" style="margin:0 0 8px">Each slot is a game of its own.</p>';
+    for (var i = 1; i <= n; i++) { var info = 'empty'; try { var raw = localStorage.getItem(CO.save.prefix + '-slot' + i), sv = raw ? JSON.parse(raw) : null; if (sv) info = (sv.day !== undefined ? 'Day ' + sv.day : 'saved') + (sv.savedAt ? ' · ' + new Date(sv.savedAt).toLocaleDateString() : ''); } catch (e) {} h += '<div style="margin:0 0 6px"><button class="co-mm-slot' + (i === BOOT_SLOT ? ' primary' : '') + '" data-start-slot="' + i + '"><b>Slot ' + i + (i === BOOT_SLOT ? ' (this one)' : '') + '</b><small>' + esc(info) + '</small></button></div>'; }
+    return h;
+  }
+  function menusStartClick(e) {
+    var back = e.target.closest('[data-start-back]'), slot = e.target.closest('[data-start-slot]'), b = e.target.closest('[data-start]');
+    if (back) { sfx('click'); menusStartBody(null); return; }
+    if (slot) { var n = +slot.getAttribute('data-start-slot'); sfx('click'); if (n === BOOT_SLOT) { menusStartBody(null); return; } if (ui.started) save(); setSlot(n); sessionFlag('skip-splash'); location.reload(); return; }
+    if (!b || !MENUS.start) return; var btn = (MENUS.start.buttons || [])[+b.getAttribute('data-start')]; if (!btn) return;
+    menusStartAct(String(btn.action || '').trim(), b);
+  }
+  function menusStartAct(a, el) {
+    sfx('click');
+    if (a === 'play' || a === '') { if (ui.started) { var st = $('dc-start'); if (st) st.hidden = true; return; } enter(); return; }
+    if (a === 'new') { if (el && el.getAttribute('data-sure') !== '1') { var was = el.textContent; el.setAttribute('data-sure', '1'); el.textContent = 'Start over in slot ' + BOOT_SLOT + '? Click again'; setTimeout(function () { el.removeAttribute('data-sure'); el.textContent = was; }, 3000); return; } wipe(); sessionFlag('skip-splash'); sessionFlag('autoplay'); location.reload(); return; }
+    if (a === 'settings') { menusStartBody(settingsHtml()); return; }
+    if (a === 'guide') { menusStartBody('<div class="dc-how">' + (CO.game && CO.game.guideHtml ? CO.game.guideHtml() : (UI.guide ? uiTextHtml(UI.guide) : '<p>No guide yet.</p>')) + '</div>'); return; }
+    if (a === 'slots') { menusStartBody(menusSlotsHtml()); return; }
+    if (a === 'quit') { try { window.close(); } catch (e) {} return; }
+    if (/^page\s+\S/.test(a)) { menusStartBody(menusPageHtml(a.slice(5).trim())); return; }
+    var r = uiAction(a); if (typeof r === 'string') toast(r, '');
+  }
+  // a pause button that is not one of the engine's: a page, or a dev command or expression
+  function menusPauseAct(i, el) { var btn = MENUS.pause && (MENUS.pause.buttons || [])[i]; if (!btn) return; var r = uiAction(String(btn.action || '').trim()); if (typeof r === 'string') toast(r, ''); }
+  function menusSettingRows() {
+    var hide = (MENUS.settings && MENUS.settings.hide) || [], rows = '';
+    MENU_SETTINGS.forEach(function (s) {
+      var k = s[0]; if (hide.indexOf(k) >= 0) return; var v = SET[k];
+      if (k === 'sens') rows += '<label><span>' + s[1] + '</span><input type="range" min="0.3" max="2.5" step="0.1" value="' + v + '" data-set="sens"></label>';
+      else if (k === 'fov') rows += '<label><span>' + s[1] + '</span><input type="range" min="60" max="100" step="1" value="' + v + '" data-set="fov"></label>';
+      else if (k === 'vol') rows += '<label><span>' + s[1] + '</span><input type="range" min="0" max="1" step="0.05" value="' + v + '" data-set="vol"></label>';
+      else if (k === 'quality') rows += '<label><span>' + s[1] + '</span><select data-set="quality">' + [['high', 'High'], ['medium', 'Medium'], ['low', 'Low (no shadows)']].map(function (o) { return '<option value="' + o[0] + '"' + (v === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>';
+      else rows += '<label><span>' + s[1] + '</span><input type="checkbox" ' + ((k === 'bob' || k === 'film') ? (v !== false ? 'checked' : '') : (v ? 'checked' : '')) + ' data-set="' + k + '"></label>';
+    });
+    ((MENUS.settings && MENUS.settings.custom) || []).forEach(function (c) {
+      if (!c || !c.key) return; var v = SET[c.key], label = esc(c.label || c.key);
+      if (c.type === 'slider') rows += '<label><span>' + label + '</span><input type="range" min="' + (c.min !== undefined ? c.min : 0) + '" max="' + (c.max !== undefined ? c.max : 1) + '" step="' + (c.step || 0.1) + '" value="' + v + '" data-set="' + esc(c.key) + '"></label>';
+      else if (c.type === 'select') rows += '<label><span>' + label + '</span><select data-set="' + esc(c.key) + '">' + (c.options || []).map(function (o) { return '<option' + (String(v) === String(o) ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select></label>';
+      else rows += '<label><span>' + label + '</span><input type="checkbox" ' + (v ? 'checked' : '') + ' data-set="' + esc(c.key) + '"></label>';
+    });
+    return rows;
+  }
+  function menusCustomKey(k) { return ((MENUS.settings && MENUS.settings.custom) || []).some(function (c) { return c && c.key === k; }); }
+  function menusCode() {
+    if (!menusOn() && !Object.keys(MENUS.pages || {}).length) return '';
+    var out = {}; ['theme', 'start', 'pause', 'settings', 'pages'].forEach(function (k) { var v = MENUS[k]; if (v && (typeof v !== 'object' || Object.keys(v).length)) out[k] = v; });
+    return '//@ the menus the editor saved: the start screen, the pause menu, the settings and their pages, as data. Written by the Co Engine editor; it sorts first in src/. Edit it in the editor rather than here.\n  CO.menus(' + JSON.stringify(out, null, 2).replace(/\n/g, '\n  ') + ');\n';
+  }
+  // what the page has now, as menu data: the Menus tab starts a game that has none from it
+  function menusSeed() {
+    var cs = getComputedStyle(document.documentElement), css = function (n, d) { var v = cs.getPropertyValue(n).trim(); return v || d; };
+    var h1 = document.querySelector('#dc-start h1'), h2 = document.querySelector('#dc-menu h2'), btns = [];
+    document.querySelectorAll('#dc-menu .dc-menu-btns [data-menu]').forEach(function (b) { var k = b.getAttribute('data-menu'); if (MENU_ACTIONS.pause.indexOf(k) >= 0) btns.push({ label: b.textContent.trim() || k, action: k, primary: b.classList.contains('primary') || undefined }); });
+    if (!btns.length) btns = [{ label: 'Resume', action: 'resume', primary: true }, { label: 'Settings', action: 'settings' }, { label: 'How to play', action: 'guide' }, { label: 'Quit to the start screen', action: 'quit' }];
+    var startBtns = [{ label: 'Play', action: 'play', primary: true }, { label: 'Settings', action: 'settings' }, { label: 'How to play', action: 'guide' }];
+    if (((CO.cfg && CO.cfg.slots) || 3) > 1) startBtns.push({ label: 'Save slots', action: 'slots' });
+    startBtns.push({ label: 'Quit', action: 'quit' });
+    return { theme: { accent: css('--amber', MENU_THEME.accent), panel: css('--panel', MENU_THEME.panel), text: css('--text', MENU_THEME.text), muted: css('--muted', MENU_THEME.muted) },
+      start: { title: h1 ? h1.textContent.trim() : document.title, subtitle: '', buttons: startBtns },
+      pause: { title: h2 ? h2.textContent.trim() : 'Paused', buttons: btns.map(function (b) { var o = { label: b.label, action: b.action }; if (b.primary) o.primary = true; return o; }) },
+      settings: { hide: [], custom: [] }, pages: {} };
+  }
+  // the editor's preview: the start screen over the running game, the pause menu, or its settings; null puts it all away
+  function menusPreview(which) {
+    var st = $('dc-start');
+    if (which === 'start') { if (ui.menuOpen) closeMenu(); if (st) { st.hidden = false; menusStartBody(null); } return !!st; }
+    if (st && ui.started) st.hidden = true;
+    if (which === 'pause' || which === 'settings') { if (!ui.menuOpen) openMenu(); else menuAct('back'); if (which === 'settings') menuAct('settings'); return true; }
+    if (ui.menuOpen) closeMenu(); return true;
+  }
+  // ── NPCs as data ──────────────────────────────────────────────────
+  // characters: { id: { names: ['Sam', 'Alex'], look: { shirt, pants, skin, hair, style }, speed, car, steps: [...] } }
+  // spawners:   [{ id, character, x, z, every, max, hours: [from, to], park: [x, z], on }]    car: arrives at x, z and parks at park
+  // workers:    [{ id, character, x, z, ry, home: [x, z], hours: [from, to] }]                  stands at x, z through the hours
+  // spots:      { name: { x, z, ry } }                                                         places the steps go to
+  // A step is { do, ... }:
+  //   walk { to }        to a spot's name, 'x, z', 'player', 'home' (where it came from), 'car' or 'post' (a worker's place)
+  //   say { text, wait } a speech bubble ({name} is the NPC's name); wait is how long it stands for it (it reads its length)
+  //   wait { seconds }   wander { radius, seconds }   face { to }   mood { mood: happy, sad, angry, talk, neutral }
+  //   talk { prompt, text, choices: [{ label, say, run, then }] }   waits for the player to press E on it, then offers the
+  //                      choices in a panel; then is next (the default), stay, leave, repeat or 'step 3'
+  //   until { test, every }   waits for an expression over the kit to come true (npc is the NPC: npc.data, npc.name)
+  //   run { code }       a dev command (cash 50) or code over the kit, with npc
+  //   event { name }     tells the game: runHooks('npc', name, npc) and GAME.npcEvent(name, npc)
+  //   leave              back to the car or the way it came, and gone        repeat   from the first step again   goto { step }
+  // A worker runs its character's steps over and over while its hours last, then goes home. An NPC is not saved: spawners and
+  // workers make them again from the data when the game loads.
+  var NPCS = { characters: {}, spawners: [], workers: [], spots: {} }, npcList = [], npcSeq = 0, npcTimers = {};
+  var NPC_COLS = { shirt: 0x3f6a9e, pants: 0x2f3440 };
+  CO.npcs = function (data) {
+    if (data === undefined) return npcData();
+    data = JSON.parse(JSON.stringify(data || {}));
+    NPCS = { characters: data.characters || {}, spawners: data.spawners || [], workers: data.workers || [], spots: data.spots || {} };
+    npcClear(); npcTimers = {}; return npcData();
+  };
+  function npcData() { return JSON.parse(JSON.stringify(NPCS)); }
+  function npcCode() {
+    if (!Object.keys(NPCS.characters).length && !NPCS.spawners.length && !NPCS.workers.length && !Object.keys(NPCS.spots).length) return '';
+    return '//@ the NPCs the editor saved: characters and what they do, their spawners, the workers and the spots they go to, as data. Written by the Co Engine editor; it sorts first in src/. Edit it in the editor rather than here.\n  CO.npcs(' + JSON.stringify(NPCS, null, 2).replace(/\n/g, '\n  ') + ');\n';
+  }
+  function npcClear() { npcList.slice().forEach(function (n) { npcRemove(n); }); npcList = []; }
+  function npcHex(v, d) { if (typeof v === 'number') return v; var m = /^#?([0-9a-f]{6})$/i.exec(String(v || '')); return m ? parseInt(m[1], 16) : d; }
+  function npcHour() { return S && typeof S.time === 'number' ? S.time : null; }
+  function npcInHours(h) { if (!h || h.length !== 2) return true; var t = npcHour(); if (t === null) return true; return h[0] <= h[1] ? t >= h[0] && t < h[1] : t >= h[0] || t < h[1]; }
+  function npcPoint(n, to) {
+    to = String(to === undefined ? '' : to).trim();
+    if (to === 'player' && player) return { x: player.x, z: player.z };
+    if (to === 'home') return { x: n.home.x, z: n.home.z };
+    if (to === 'post' && n.post) return { x: n.post.x, z: n.post.z, ry: n.post.ry };
+    if (to === 'car' && n.car) return { x: n.carDoor.x, z: n.carDoor.z };
+    var sp = NPCS.spots[to]; if (sp) return { x: +sp.x || 0, z: +sp.z || 0, ry: sp.ry };
+    var m = /^(-?[\d.]+)\s*[, ]\s*(-?[\d.]+)$/.exec(to); if (m) return { x: +m[1], z: +m[2] };
+    if (to.indexOf('prop:') === 0 && typeof propPlacement === 'function') { var pp = propPlacement(to.slice(5)); if (pp) { var w = propWorld(to.slice(5), 0, 1.2); return { x: w.x, z: w.z }; } }
+    return null;
+  }
+  function npcSay(n, text) { var t = String(text || '').replace(/\{name\}/g, n.name); say(n.g, t); runHooks('npcSay', n.pub, t); return t; }
+  function npcRun(n, code) {
+    code = String(code || '').trim(); if (!code) return;
+    var sp = code.indexOf(' '), name = sp < 0 ? code : code.slice(0, sp), arg = sp < 0 ? undefined : code.slice(sp + 1).trim();
+    if (devCommandList().indexOf(name) >= 0) { if (arg !== undefined && arg !== '' && !isNaN(arg)) arg = +arg; var r = devCommand(name, arg); hudDirty = true; return r; }
+    try { new Function('K', 'npc', 'with (K) { ' + code + '\n }')(editorKit(), n.pub); hudDirty = true; } catch (e) { toast(n.name + ': ' + e.message, 'bad'); }
+  }
+  function npcTest(n, expr) { try { return !!new Function('K', 'npc', 'with (K) { return (' + expr + '\n); }')(editorKit(), n.pub); } catch (e) { return false; } }
+  // a person in the world with its own record: where it is, the step it is on, what it waits for
+  function npcMake(charId, at, opt) {
+    var ch = NPCS.characters[charId]; if (!ch) return null; opt = opt || {};
+    var look = ch.look || {}, names = (ch.names && ch.names.length ? ch.names : [charId]), name = opt.name || names[Math.floor(Math.random() * names.length)];
+    var hopt = { key: charId + ':' + name + ':' + (++npcSeq) };
+    if (look.skin) hopt.skin = npcHex(look.skin); if (look.hair) hopt.hair = npcHex(look.hair); if (look.style) hopt.style = look.style;
+    if (look.shirt) hopt.shirt = std({ map: TEX.cloth, color: npcHex(look.shirt, NPC_COLS.shirt), roughness: 0.92 }); if (look.pants) hopt.pants = std({ map: TEX.cloth, color: npcHex(look.pants, NPC_COLS.pants), roughness: 0.95 });
+    var g = makeHuman(hopt); g.userData.dynamic = true; g.userData.npc = true; scene.add(g);
+    var n = { id: 'npc' + npcSeq, ch: ch, charId: charId, name: name, g: g, x: at.x, z: at.z, yaw: at.ry || 0, path: null, speed: ch.speed || 1.4, step: 0, t: 0, state: 'start', talkOpen: false, home: { x: at.x, z: at.z }, data: {}, spawner: opt.spawner || null, worker: opt.worker || null, post: opt.post || null, car: null, carDoor: null, gone: false };
+    n.pub = { id: n.id, name: name, character: charId, data: n.data, get x() { return n.x; }, get z() { return n.z; }, get step() { return n.step; }, say: function (t) { return npcSay(n, t); }, leave: function () { npcLeave(n); }, go: function (i) { npcGoto(n, i); }, next: function () { npcNext(n); } };
+    n.hit = hitBox(0.8, 1.9, 0.8, 0, 0.95, 0, { prompt: function () { var st = npcStepNow(n); return st && st.do === 'talk' && n.state === 'talk' ? String(st.prompt || 'Talk to {name}').replace(/\{name\}/g, n.name) : ''; }, use: function () { npcTalk(n); } }, g);
+    npcList.push(n); npcPlace(n); runHooks('npcSpawn', n.pub); return n;
+  }
+  function npcPlace(n) { n.g.position.set(n.x, floorY(n.x, n.z), n.z); n.g.rotation.y = n.yaw; }
+  function npcRemove(n) {
+    n.gone = true; if (n.talkOpen && ui.panelOpen && panel.kind === 'npc') closePanel();
+    var k = inter.indexOf(n.hit); if (k >= 0) inter.splice(k, 1); scene.remove(n.g);
+    if (n.car) { scene.remove(n.car.g); var tk = traffic.cars.indexOf(n.car.rec); if (tk >= 0) traffic.cars.splice(tk, 1); }
+    var i = npcList.indexOf(n); if (i >= 0) npcList.splice(i, 1); runHooks('npcGone', n.pub);
+  }
+  function npcStepNow(n) { var steps = n.ch.steps || []; return steps[n.step] || null; }
+  function npcNext(n) { n.step++; n.state = 'start'; n.t = 0; n.path = null; }
+  function npcGoto(n, i) { n.step = Math.max(0, i | 0); n.state = 'start'; n.t = 0; n.path = null; }
+  function npcLeave(n) { n.leaving = true; n.state = 'start'; n.path = null; n.t = 0; }
+  // the route finder where its grid covers both ends; outside it a straight walk; either way the walk ends on the point itself
+  function npcOnGrid(q) { if (NAV.dirty || !NAV.grid) navBuild(); return !!NAV.grid && q.x >= NAV.x0 && q.z >= NAV.z0 && q.x < NAV.x0 + NAV.w * NAV.cell && q.z < NAV.z0 + NAV.h * NAV.cell; }
+  function npcWalkTo(n, p) { var path = npcOnGrid(n) && npcOnGrid(p) ? route({ x: n.x, z: n.z }, { x: p.x, z: p.z }) : null; if (!path || !path.length) path = [{ x: p.x, z: p.z }]; else { var last = path[path.length - 1]; if (Math.hypot(last.x - p.x, last.z - p.z) > 0.5) path.push({ x: p.x, z: p.z }); } n.path = path; n.faceTo = p.ry; }
+  // the player pressed E on an NPC at a talk step: its words and the choices, in a panel
+  function npcTalk(n) { var st = npcStepNow(n); if (!st || st.do !== 'talk') return; n.talkOpen = true; NPC_PANEL.n = n; n.yaw = Math.atan2(player.x - n.x, player.z - n.z); setMood(n.g, 'talk'); openPanel('npc'); }
+  var NPC_PANEL = { n: null };
+  function npcPanelSpec() {
+    var n = NPC_PANEL.n, st = n && npcStepNow(n); if (!n || !st) return { title: '', tabs: [], body: '' };
+    var choices = st.choices && st.choices.length ? st.choices : [{ label: 'OK' }];
+    return { title: n.name, tabs: [], body: '<div class="dc-how">' + uiTextHtml(String(st.text || '').replace(/\{name\}/g, n.name)) + '</div><div class="dc-menu-row" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + choices.map(function (c, i) { return '<button class="dc-btn' + (i === 0 ? ' primary' : '') + '" data-act="npc" data-arg="' + i + '">' + esc(c.label || 'OK') + '</button>'; }).join('') + '</div>' };
+  }
+  function npcChoice(i) {
+    var n = NPC_PANEL.n, st = n && npcStepNow(n); if (!n || !st) { closePanel(); return true; }
+    var c = (st.choices && st.choices[+i]) || {}; n.talkOpen = false; NPC_PANEL.n = null; closePanel();
+    if (c.say) npcSay(n, c.say); if (c.run) npcRun(n, c.run);
+    runHooks('npc', 'choice', n.pub, c.label); if (CO.game && CO.game.npcEvent) CO.game.npcEvent('choice', n.pub, c.label);
+    var then = String(c.then || 'next').trim();
+    if (then === 'stay') n.state = 'talk'; else if (then === 'leave') npcLeave(n); else if (then === 'repeat') npcGoto(n, 0); else if (/^step\s+\d+$/.test(then)) npcGoto(n, +then.slice(5) - 1); else npcNext(n);
+    return true;
+  }
+  // one NPC, one frame: its car, its walk, the step it is on
+  function npcTick(n, dt) {
+    if (n.car && n.car.moving) { npcCarTick(n, dt); return; }
+    var moving = false;
+    if (n.path && n.path.length) { var done = walkAlong(n, n.path, n.speed, dt); moving = !done; if (done) { n.path = null; if (typeof n.faceTo === 'number') n.yaw = n.faceTo; } }
+    npcPlace(n); animateHuman(n.g, dt, moving ? 'walk' : 'idle', n.speed);
+    if (moving) return;
+    if (n.leaving) { npcLeaveTick(n, dt); return; }
+    var st = npcStepNow(n);
+    if (!st) { if (n.worker) { npcGoto(n, 0); return; } npcLeave(n); return; }
+    if (n.worker && !npcInHours(n.worker.hours) && st.do !== 'talk') { npcLeave(n); return; }
+    var first = n.state === 'start'; if (first) { n.state = 'run'; n.t = 0; } n.t += dt;
+    switch (st.do) {
+      case 'walk': if (first) { var p = npcPoint(n, st.to); if (p) npcWalkTo(n, p); else npcNext(n); } else npcNext(n); break;
+      case 'say': if (first) { var t = npcSay(n, st.text); n.wait = st.wait !== undefined ? +st.wait : 1.2 + t.length * 0.05; } else if (n.t >= n.wait) npcNext(n); break;
+      case 'wait': if (n.t >= (+st.seconds || 1)) npcNext(n); break;
+      case 'wander': if (first) { n.wanderAt = { x: n.x, z: n.z }; n.wanderT = 0; } if (n.t >= (+st.seconds || 10)) { npcNext(n); break; } n.wanderT -= dt; if (n.wanderT <= 0) { var r = +st.radius || 3, a = Math.random() * Math.PI * 2, d = Math.random() * r; npcWalkTo(n, { x: n.wanderAt.x + Math.cos(a) * d, z: n.wanderAt.z + Math.sin(a) * d }); n.wanderT = randf(2, 5); } break;
+      case 'face': var fp = npcPoint(n, st.to); if (fp) n.yaw = Math.atan2(fp.x - n.x, fp.z - n.z); else if (typeof st.ry === 'number') n.yaw = st.ry; npcNext(n); break;
+      case 'mood': setMood(n.g, st.mood || 'neutral'); npcNext(n); break;
+      case 'talk': if (first) n.state = 'talk'; else n.state = 'talk'; break;
+      case 'until': if (!n.untilT || n.untilT <= 0) { n.untilT = +st.every || 0.5; if (npcTest(n, st.test || 'true')) npcNext(n); } else n.untilT -= dt; break;
+      case 'run': npcRun(n, st.code); npcNext(n); break;
+      case 'event': runHooks('npc', st.name || 'event', n.pub); if (CO.game && CO.game.npcEvent) CO.game.npcEvent(st.name || 'event', n.pub); npcNext(n); break;
+      case 'leave': npcLeave(n); break;
+      case 'repeat': npcGoto(n, 0); break;
+      case 'goto': npcGoto(n, (+st.step || 1) - 1); break;
+      default: npcNext(n);
+    }
+  }
+  // leaving: walk back to the car and drive off, or walk back the way it came, and go
+  function npcLeaveTick(n, dt) {
+    if (n.state === 'start') { n.state = 'walking'; var p = n.car ? n.carDoor : n.home; npcWalkTo(n, p); return; }
+    if (n.car) { n.g.visible = false; n.car.moving = true; n.car.back = true; n.car.i = n.car.path.length - 1; return; }
+    npcRemove(n);
+  }
+  // a car that brings its NPC: from the spawner along to its parking place, then the NPC gets out; leaving reverses it
+  function npcCarStart(n, sp) {
+    var path = [{ x: +sp.x, z: +sp.z }].concat((sp.via || []).map(function (q) { return { x: +q[0], z: +q[1] }; })).concat([{ x: +sp.park[0], z: +sp.park[1] }]);
+    var g = carMesh(); g.userData.dynamic = true; scene.add(g); var rec = { g: g, npc: true, road: true, dir: 1, z: 0, v: 0 }; traffic.cars.push(rec);
+    var c = { g: g, rec: rec, path: path, i: 0, x: path[0].x, z: path[0].z, yaw: 0, v: 0, moving: true, back: false };
+    var a = path[path.length - 2] || path[0], b = path[path.length - 1], yaw = Math.atan2(-(b.z - a.z), b.x - a.x);
+    n.car = c; n.carDoor = { x: b.x - Math.sin(yaw) * 1.6, z: b.z - Math.cos(yaw) * 1.6 };   // the driver's side: to the left of the way the car faces
+    n.g.visible = false; npcCarPlace(c);
+  }
+  function npcCarPlace(c) { c.g.position.set(c.x, floorY(c.x, c.z), c.z); c.g.rotation.y = c.yaw; }
+  function npcCarTick(n, dt) {
+    var c = n.car, tgt = c.back ? c.path[c.i - 1] : c.path[c.i + 1];
+    if (!tgt) { c.moving = false; if (c.back) { npcRemove(n); return; } n.x = n.carDoor.x; n.z = n.carDoor.z; n.g.visible = true; npcPlace(n); return; }
+    var dx = tgt.x - c.x, dz = tgt.z - c.z, d = Math.hypot(dx, dz), last = c.back ? c.i - 1 === 0 : c.i + 1 === c.path.length - 1, want = last && !c.back ? Math.min(7, Math.max(1.2, d * 0.9)) : 7;
+    c.v += clamp(want - c.v, -6 * dt, 3 * dt); var step = c.v * dt;
+    var yaw = Math.atan2(-dz, dx); c.yaw = c.yaw + Math.atan2(Math.sin(yaw - c.yaw), Math.cos(yaw - c.yaw)) * Math.min(1, dt * 4);   // leaving, it turns round as it pulls away
+    if (d <= step) { c.x = tgt.x; c.z = tgt.z; c.i += c.back ? -1 : 1; } else { c.x += dx / d * step; c.z += dz / d * step; }
+    npcCarPlace(c); var ws = c.g.userData.wheels; if (ws) ws.forEach(function (w) { w.rotation.z -= c.v * dt / 0.33; });
+  }
+  function npcSpawn(sp) {
+    var at = { x: +sp.x || 0, z: +sp.z || 0, ry: sp.ry || 0 }, ch = NPCS.characters[sp.character]; if (!ch) return null;
+    var n = npcMake(sp.character, at, { spawner: sp }); if (!n) return null;
+    if (ch.car && sp.park) npcCarStart(n, sp);
+    return n;
+  }
+  function npcWorkerStart(w) {
+    var home = w.home ? { x: +w.home[0], z: +w.home[1] } : { x: +w.x, z: +w.z }, inside = !w.hours;
+    var n = npcMake(w.character, inside ? { x: +w.x, z: +w.z, ry: w.ry || 0 } : { x: home.x, z: home.z }, { worker: w, post: { x: +w.x, z: +w.z, ry: w.ry || 0 }, name: w.name });
+    if (!n) return null; n.home = home; if (!inside) npcWalkTo(n, n.post); return n;
+  }
+  // the frame: spawners make NPCs on their clock and inside their hours, workers come and go with theirs, every NPC steps
+  function npcsTick(dt) {
+    if (!ui.started) return;
+    NPCS.spawners.forEach(function (sp, i) {
+      if (sp.on === false) return; var key = sp.id || 'sp' + i, mine = npcList.filter(function (n) { return n.spawner === sp; }).length;
+      if (!npcInHours(sp.hours) || mine >= (sp.max === undefined ? 1 : +sp.max)) return;
+      npcTimers[key] = (npcTimers[key] === undefined ? Math.min(3, +sp.every || 30) : npcTimers[key]) - dt;
+      if (npcTimers[key] <= 0) { npcTimers[key] = Math.max(1, +sp.every || 30); npcSpawn(sp); }
+    });
+    NPCS.workers.forEach(function (w) { var have = npcList.some(function (n) { return n.worker === w; }); if (!have && npcInHours(w.hours) && !w.off) npcWorkerStart(w); });
+    npcList.slice().forEach(function (n) { if (!n.gone) npcTick(n, dt); });
+  }
+  // the editor's way to look: one NPC now from a spawner, a character at a point, or what each NPC is doing
+  function npcSpawnNow(ref) {
+    if (typeof ref === 'string' && /^\d+$/.test(ref)) ref = +ref;
+    var sp = typeof ref === 'number' ? NPCS.spawners[ref] : NPCS.spawners.filter(function (s) { return s.id === ref; })[0];
+    if (sp) { var n = npcSpawn(sp); return n ? n.pub.id : null; }
+    if (NPCS.characters[ref]) { var a = aheadPoint(4); var m = npcMake(ref, { x: a.x, z: a.z }); return m ? m.pub.id : null; }
+    return null;
+  }
+  function npcInfo() { return npcList.map(function (n) { var st = npcStepNow(n); return { id: n.id, name: n.name, character: n.charId, x: Math.round(n.x * 10) / 10, z: Math.round(n.z * 10) / 10, step: n.step + 1, doing: n.leaving ? 'leave' : n.car && n.car.moving ? 'drive' : st ? st.do : 'done', state: n.state, worker: !!n.worker }; }); }
+  function npcAim() { var a = aheadPoint(6); return { x: Math.round(a.x * 10) / 10, z: Math.round(a.z * 10) / 10, ry: Math.round(camera.rotation.y * 100) / 100 }; }
   // ── The dev link ──────────────────────────────────────────────────
   // The editor (and the dev console) run a local server on 127.0.0.1:8432. The game links to it with Ctrl+Shift+D, when started
   // with ?dev=1, or, in the desktop app, by itself: every five seconds while unlinked it asks the port once and links when
@@ -2888,6 +3222,10 @@
     clipSeek: function (id, name, t) { var o = eobj(id), c = CLIPS[name]; if (!o || !c) return { error: 'no such object or clip' }; stopClip(o); c.tracks.forEach(function (tr) { var tg = clipTarget(o, tr.path); if (tg) { var v = trackValue(tr.keys, t); if (v !== undefined) tg.set(v); } }); return { ok: true, t: t }; },
     clipKey: function (id, name, t, ease) { var o = eobj(id); if (!o) return { error: 'no such object ' + id }; var n = clipKeyPose(o, name, +t || 0, ease); return n === null ? { error: 'no clip ' + name } : { ok: true, keyed: n, t: +t || 0 }; },
     clipPaths: function (id) { var o = eobj(id); if (!o) return []; var u = o.userData || {}, out = ['position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z', 'scale.x', 'scale.y', 'scale.z', 'visible']; if (u.legs) ['leg.0', 'leg.1', 'knee.0', 'knee.1', 'arm.0', 'arm.1', 'elbow.0', 'elbow.1', 'torso', 'head'].forEach(function (p) { out.push(p + '.rotation.x', p + '.rotation.y', p + '.rotation.z'); out.push(p + '.position.y'); }); o.children.forEach(function (ch, i) { if (ch.userData.editor) return; ['rotation.x', 'rotation.y', 'rotation.z', 'position.x', 'position.y', 'position.z'].forEach(function (f) { out.push('child.' + i + '.' + f); }); if (ch.name) out.push('name.' + ch.name + '.rotation.y'); }); return out; },
+    npcs: npcData, npcsCode: npcCode, npcSpawn: npcSpawnNow, npcInfo: npcInfo, npcAim: npcAim, npcClear: npcClear,
+    npcsSet: function (data) { var prev = npcData(), next = JSON.parse(JSON.stringify(data || {})); CO.npcs(next); histPush('NPCs', function () { CO.npcs(prev); }, function () { CO.npcs(next); }); return npcData(); },
+    menus: menusData, menusCode: menusCode, menusSeed: menusSeed, menusPreview: menusPreview,
+    menusSet: function (data) { var prev = menusData(), next = JSON.parse(JSON.stringify(data || {})); CO.menus(next); histPush('Menus', function () { CO.menus(prev); }, function () { CO.menus(next); }); return menusData(); },
     ui: uiData, uiSet: function (data) { var prev = uiData(), next = JSON.parse(JSON.stringify(data || {})); CO.ui(next); if (ui.panelOpen) renderPanel(); histPush('UI', function () { CO.ui(prev); }, function () { CO.ui(next); }); return uiData(); },
     tables: tablesList, tableSet: tableSet, tablesCode: tablesCode, uiCode: uiCode, uiOpen: function (kind) { openPanel(kind); return !!UI.panels[kind]; }, uiEval: uiEval,
     packCode: function (types) { var ids = (types && types.length ? types : PROP_ORDER.filter(function (id) { return !/^pk[A-Z]/.test(id); })).filter(function (id) { return PROPS[id] && PROPS[id].build; }); var lines = ['//@ a pack made in the Co Engine editor from ' + (CO.game && CO.game.handle || 'a game') + '\'s props. A prop that calls the game\'s own functions needs them in the game it goes to.']; ids.forEach(function (id) { var d = PROPS[id], f = {}; ['label', 'cat', 'wall', 'fixed', 'price', 'desc', 'lvl', 'ico', 'noBlob'].forEach(function (k) { if (d[k] !== undefined) f[k] = d[k]; }); f.extra = true; f.shop = false; var body = JSON.stringify(f); lines.push('  defProp(' + JSON.stringify(id) + ', Object.assign(' + body + ', { build: ' + d.build.toString() + (d.after ? ', after: ' + d.after.toString() : '') + ' }));'); }); return { ids: ids, code: lines.join('\n') + '\n' }; },
@@ -3084,7 +3422,7 @@
     if (ui.started && !ui.blocked()) { if (photo.on && CO.game.photo !== false) photoTick(dt); else { if (CO.game.tick) CO.game.tick(dt); if (CO.game.weather !== false) tickWeatherState(dt); updatePlayer(dt); } autosaveT += dt; if (autosaveT > 30) { autosaveT = 0; save(); } }
     profMark('sim', pf); pf = PROF.on ? performance.now() : 0;
     worldTime += dt;
-    if (CO.game.lighting !== false) lighting(dt); updateLightBudget(); shadowTick(dt); if (sky.dome || sky.rain) tickSky(dt); tickBursts(dt); doorsTick(dt); drawScreens(dt); editTick(); tickTraffic(dt);
+    if (CO.game.lighting !== false) lighting(dt); updateLightBudget(); shadowTick(dt); if (sky.dome || sky.rain) tickSky(dt); tickBursts(dt); doorsTick(dt); drawScreens(dt); editTick(); tickTraffic(dt); npcsTick(dt);
     profMark('world', pf); pf = PROF.on ? performance.now() : 0;
     if (CO.game.present) CO.game.present(dt); runHooks('frame', dt);
     for (var ai = 0; ai < animated.length; ai++) animated[ai](dt);
@@ -3301,6 +3639,87 @@
       { id: "cp-mv2rkcdd-2y", type: "ctStreetLamp", x: -29.15, z: 22.75, rot: 3, h: 0 },
       { id: "cp-mv2rkx98-2z", type: "bdTerrace", x: -37.15, z: 17.1, rot: 0, h: 0 },
     ]
+  });
+  CO.menus({
+    "theme": {
+      "accent": "#f5b53d",
+      "panel": "#121a24",
+      "text": "#eef1f5",
+      "muted": "#a0acb8"
+    },
+    "start": {
+      "title": "Garage Co.",
+      "subtitle": "",
+      "buttons": [
+        {
+          "label": "Play",
+          "action": "play",
+          "primary": true
+        },
+        {
+          "label": "Settings",
+          "action": "settings"
+        },
+        {
+          "label": "How to play",
+          "action": "guide"
+        },
+        {
+          "label": "Save slots",
+          "action": "slots"
+        },
+        {
+          "label": "Quit",
+          "action": "quit"
+        }
+      ]
+    },
+    "pause": {
+      "title": "Paused",
+      "buttons": [
+        {
+          "label": "Resume",
+          "action": "resume",
+          "primary": true
+        },
+        {
+          "label": "Settings",
+          "action": "settings"
+        },
+        {
+          "label": "How to play",
+          "action": "guide"
+        },
+        {
+          "label": "Build mode",
+          "action": "edit"
+        },
+        {
+          "label": "The books",
+          "action": "stats"
+        },
+        {
+          "label": "Save file",
+          "action": "saves"
+        },
+        {
+          "label": "Unlink the editor",
+          "action": "devlink"
+        },
+        {
+          "label": "⟲ Reset this save",
+          "action": "reset"
+        },
+        {
+          "label": "Quit to the start",
+          "action": "quit"
+        }
+      ]
+    },
+    "settings": {
+      "hide": [],
+      "custom": []
+    }
   });
   // the pack's state in the save: which gates and barriers are open, which levers are on
   function pkState() { if (!S.pack) S.pack = { gates: {}, switches: {} }; if (!S.pack.gates) S.pack.gates = {}; if (!S.pack.switches) S.pack.switches = {}; return S.pack; }
