@@ -19,6 +19,16 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Read access to the private engine repo
+        shell: bash
+        env:
+          CO_ENGINE_TOKEN: ${{ secrets.CO_ENGINE_TOKEN }}
+        run: |
+          if [ -z "$CO_ENGINE_TOKEN" ]; then echo "::error::The CO_ENGINE_TOKEN secret is missing. Co Engine is a private repo, so npm cannot fetch it without a read-only token (see the repo's Settings, Secrets and variables, Actions)."; exit 1; fi
+          base="https://x-access-token:${CO_ENGINE_TOKEN}@github.com/TheCodingDad-TisonK/Co-Engine"
+          git config --global url."$base".insteadOf "ssh://git@github.com/TheCodingDad-TisonK/Co-Engine"
+          git config --global --add url."$base".insteadOf "git@github.com:TheCodingDad-TisonK/Co-Engine"
+          git config --global --add url."$base".insteadOf "https://github.com/TheCodingDad-TisonK/Co-Engine"
       - run: npm ci
       - name: The tag must match package.json
         if: startsWith(github.ref, 'refs/tags/')
