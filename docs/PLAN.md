@@ -1,6 +1,6 @@
 # Garage Co.
 
-A first-person car workshop. Cars come in broken, you find the fault, get the part, fix it on the lift, take the money, and the car drives off. The lock-up grows into a dealership. A candidate for the third or fourth game on Co Engine, written 2026-10-08.
+A first-person car workshop. Cars come in broken, you find the fault, get the part, fix it on the lift, take the money, and the car drives off. The lock-up grows into a dealership. Game three on Co Engine, written 2026-10-08; the shop and the system sections added 2026-10-11.
 
 ## The pitch
 
@@ -41,6 +41,93 @@ Everything earns XP; every fifth level the building grows, free, overnight, as i
 - **Weather and seasons.** Rain brings breakdowns and wet-weather jobs; winter brings tyres and batteries; summer brings air-con.
 - **The town.** Grow Co's city kit outside the fence: the road, parked cars, pedestrians, the lap round the block.
 
+## Where it stands (v0.2.2)
+
+The lock-up plays end to end: one bay, one car at a time, four faults (oil, brakes, bulb, battery) from the `FAULTS` table, the customer at the desk, the job card on the bench, the roll door panel, XP and levels, and the town laid out in the editor with traffic on the road network. Two things are thin. The work itself is standing at the car while a bar fills. Rep starts at 10, goes up by one per paid job, and nothing in the game reads it. The next update is in two parts: the shop (more room, workers) and the system (more jobs, real hands-on work, stock and a PC to run it all).
+
+## The next update: the shop
+
+### More room
+
+- **Before level 5, bought from the PC.** Two add-ons on the lock-up's side wall: a **stores shed** (shelving for stock past the one parts rack) and a **tyre corner** (the tyre bench with its water tank, the air line, later the tyre machine and the balancer). Each one is a small lean-to built overnight after you buy it.
+- **At level 5, the two-bay garage**, built overnight as the ladder says. It grows in place: a second hall the same size off the lock-up's east wall, with its own roll door, bay 2 and lift, and the side door as the way between the halls. An **office** goes off the side door, with the PC desk and a window onto both bays. A **stores room** sits behind the parts rack. A **waiting corner** with two chairs and a coffee machine, where a customer sits instead of standing at the desk. The forecourt gets four marked bays where cars can wait their turn.
+- **What changes underneath:** `BAY` becomes a list of bays and `S.job` becomes `S.jobs`, one per bay, each with its own car, customer and state. The roll door panel and the job card read the bay they stand at.
+
+### Workers
+
+- **Hired at the PC** (the Staff app): every morning a short list of candidates, each with a name, a day wage, a skill from 1 to 5 and the jobs they can do.
+- **The roles, in ladder order:** the **apprentice** from level 3 (oil, bulbs, batteries, wipers; slow, and now and then forgets a step, which comes back as a comeback), the **mechanic** at level 5 with the second bay (every job of the level, at your speed), the **receptionist** at level 7 (takes jobs and payments at the desk so you can stay at the cars). The painter, valeter and recovery driver follow the ladder above.
+- **How a worker works:** they clock in at eight and pick a car off the job board (only the jobs you hand them, or any job once you tick "let them take jobs"). They walk to the rack for the part, carry it to the car, and work through the same steps you do (see Interactive work), at the speed their skill gives them. When the car is done they set it to done, and the customer pays at the desk. If the part isn't on the rack, they put the job on hold and it shows on the PC.
+- **Pay and growth:** wages come out of the bank at close. Skill rises with jobs done, faster with a training course bought on the PC. A worker who isn't paid, or who works too many late days, gets slower and can quit.
+- You can always walk up and take over a car a worker is on.
+
+## The next update: the system
+
+### More jobs
+
+The `FAULTS` table grows from four to about twelve, opened by level. Each job names its symptom, its part, its tool, its steps, its time and its price; the invoice shows labour and parts as separate lines.
+
+| Job | What the customer says | Part | Tool | From level |
+|---|---|---|---|---|
+| Oil and filter | The oil light is on | 5 L of oil, an oil filter | jack, drain pan, filter wrench | 1 |
+| Front brake pads | It squeals when I brake | a pad set | jack, wheel brace | 1 |
+| Headlight bulb | The left headlight is out | a bulb | hands | 1 |
+| Battery | It would not start | a battery | spanner | 1 |
+| Wiper blades | It smears in the rain | a wiper pair | hands | 2 |
+| Puncture | The tyre keeps going flat | a plug kit | jack, wheel brace, tyre corner | 2 |
+| Air filter | It feels sluggish and thirsty | an air filter | hands | 3 |
+| Spark plugs | It misfires pulling away | four plugs | plug socket | 3 |
+| Coolant | It runs hot in traffic | coolant | hands | 4 |
+| New tyre | The tyre is worn to the cord | a tyre | tyre machine, balancer | 5 |
+| Exhaust | It rattles and it is loud | an exhaust section | jack, spanner | 5 |
+| Discs and pads | It grinds when I brake | discs and a pad set | jack, wheel brace | 6 |
+
+A car can come in with two faults, or you spot a second one while it is in (worn wipers, a low tyre). Offering it to the customer at the desk is an upsell. They say yes or no, and the yes rate rises with rep.
+
+### Interactive work
+
+The bar that fills while you stand at the car is replaced by real steps at real parts of the car.
+
+- **The car opens.** The bonnet, the boot, the doors and the four wheels are hinged or removable groups on the car mesh. This is the plan's "hinged car parts as a standard", and an engine candidate afterwards. E on the bonnet lifts it on its hinge and the stay goes in. The engine bay has parts you can point at: the oil filler cap, the dipstick, the battery, the air filter box, the coolant tank, the washer bottle, the headlight units from behind.
+- **A job is a step list on the job card.** Each step names a place on the car, a tool, and an action. A **press** (open the bonnet, take the cap off), a **hold** (undo the sump plug, pump the jack: a bar while you hold E), or a **carry** (the old battery to the bench, the new one from the rack). The next step's place glows on the car, and the card ticks each step off.
+- **Oil and filter, step by step:** jack under the sill and pump the car up. Slide the drain pan under. Undo the sump plug (hold) and wait while it drains (the level drops in the pan). Swap the filter with the filter wrench (hold). Sump plug back in. Lower the car. Open the bonnet and fill from the can (hold; the dipstick shows the level). Cap on, bonnet shut.
+- **A puncture, step by step:** jack the corner up. Undo the five nuts with the wheel brace (a hold each). Take the wheel off and carry it to the tyre corner. Lower it into the water tank and turn it until the bubbles show the hole. Plug it with the plug kit. Pump it up with the air line. Carry it back, wheel on, nuts on, lower the car.
+- **Mistakes cost something, within limits.** Leave the sump plug out and the oil ends up on the forecourt, and the car comes back tomorrow as a comeback, which costs rep. Overfill it and the dipstick says so before you shut the bonnet. The step list never lets you drive a car off with a wheel missing or the car still up on the jack.
+- **Tools are in your hands.** You take a tool off the tool wall (the hands kit, as Depot Co's scanner) and hang it back afterwards. The tool wall shows an outline where a tool is missing. A step needs its tool in hand.
+- **Workers run the same steps.** An apprentice's car shows the same open bonnet and the same wheel off as yours does.
+
+### Stock and the PC
+
+- **Parts are stock.** A part has a count. It sits on the parts rack, and later in the stores shed and the stores room, as boxes on a shelf slot: one part type per slot, the Depot Co slot model. A new garage starts with a few of each level 1 part.
+- **A job takes its part at the step that fits it.** No part, no step: the job card says what is missing. The customer either leaves the car overnight in a forecourt bay or drives off, and that costs rep.
+- **The PC** stands on the desk now (the desk already carries a monitor) and moves to the office with the two-bay garage. E at the desk sits you down in front of it, like Depot Co's office PC (`src/13-pc.js` there): apps drawn on the screen, tapped with the crosshair, lists that scroll.
+- **Its apps:**
+  - **Parts:** the supplier's catalogue by category, a price per part, a basket, Order. Standard delivery comes on the parts van at half past eight the next morning; express comes the same day for a fee. Prices drift a little from day to day.
+  - **Stock:** what is on the shelves, what is on order, and a minimum per part. Once the supplier account opens (level 5), the shop reorders up to the minimums at close by itself.
+  - **Jobs:** today's cars, what each one waits on, and the done list. The clipboard on the desk stays as the quick view. Bookings arrive here once appointments open (level 5).
+  - **Staff:** candidates, hire, wages, skills, training, let go.
+  - **Garage:** buy room (the stores shed, the tyre corner), tools (filter wrench, plug socket, tyre machine, balancer, compressor) and upgrades (a jack that pumps faster, a second tool wall).
+  - **Books:** the ledger, the day's takings against wages and parts, and rep with where every change came from.
+- **The parts van:** comes off the road at half past eight, parks in a forecourt bay, and the driver leaves the boxes by the roll door. You or a worker carry them to the rack.
+
+### Rep that does something
+
+Rep sets how often cars come (the gap between cars shrinks as it rises), how far they come from, and how much a customer accepts for labour. It rises with a paid job and a job done before the promised time. It falls for a comeback, a customer who drives off because a part is missing, and a job that runs past its promised time. The Books app shows every change.
+
+### The lift and driving the car in
+
+Tyson, 2026-10-11: the customer parks in the bay outside and walks to the desk; you take the job, get in, and drive the car yourself through the roll door onto the lift.
+
+- **The lift** is a two-post lift just inside each roll door: the lock-up has one from the start, the second hall has its own. Yellow lines on the floor show where to stop.
+- **Driving:** E on the car of a job you have taken puts you in the driving seat (W and S, A and D to steer). The roll door rides up as you come. You can only get out on a lift's lines or back in the car's own bay, so a car is never left standing in the way.
+- **On the lift** every jack step becomes a lift step: hold E at the control box on the left post and the car rises to working height (1.5 m) as the step fills. The sump, the filter, the brakes and the exhaust are then done standing under it. Lift steps are quicker than the trolley jack.
+- **The trolley jack** still works for a car left out in its bay, so the lift is the better way, not the only one. Staff work a car wherever it stands.
+- **Leaving:** once paid, the customer reverses the car off the lift and out of the roll door, then drives off the way they came.
+
+### What shipped in v0.3.0
+
+Tyson asked for all of it in one release, so v0.3.0 carries every part of this update: the PC and stock, the step-by-step work with the tools, the twelve jobs, rep that does something, more room (the tyre corner, the stores shed, the two-bay garage), the workers, and the lift you drive onto. The two-bay garage grows in place: it is built into the lock-up's own world item off the east wall, so the town Tyson laid out stays as it is, and an editor move of the lock-up takes the new hall with it. Anything placed where the new hall stands (the front fence on that side) is cleared the night it grows. `tests/lockup.smoke.js`, `tests/systems.smoke.js` and `tests/garage2.smoke.js` cover it: 134 checks.
+
 ## What the engine gives, what is new
 
 Engine as of M2: the world kit, props and build mode, doors, people, screens, the hand-held device, the vehicle meshes and the drivable-vehicle core, lane traffic, the yard and the town kit, weather, saves, the shell, the dev console, the editor.
@@ -59,6 +146,9 @@ Comparable to Depot Co at 1.21: about twenty-five levels, five buildings, six ro
 
 ## Open questions for Tyson
 
-- Real makes or made-up ones? Made-up keeps us clear of trademarks and lets the cars match the house look.
+- Real makes or made-up ones? Answered by the lock-up: made-up (Harlow, Pennant, Kestrel, Dunmore, Alder, Brampton).
+- More room: the two-bay garage grows in place in v0.3.0. Does the workshop (level 10) move to a bigger plot in town, or keep growing here?
+- Steps go in a fixed order in v0.3.0 (the card always knows the next one). Any order that works, later?
+- Workers are paid by the day in v0.3.0. By the job instead?
 - How hard should diagnosis be? A puzzle with a wrong-guess cost, or a timer you buy down with better tools?
 - Does the player drive on the road, or only on the forecourt and the lap? The town kit allows both.

@@ -3,19 +3,48 @@
   // The first room of the game: a lock-up on the edge of town with a roll door onto a small forecourt. Cars come in off the road,
   // the customer walks to the desk, you take the job, fix the car in the bay and take the payment. Everything else in docs/PLAN.md
   // builds on this room. GAME carries the hooks for the engine (CO.game); G holds the live things that are not state (meshes, timers).
-  var GAME = {}, G = { lamps: [], rollT: 0, nextCarAt: 0, customerNearDoor: false };
+  var GAME = {}, G = { lamps: [], rollT: 0, roll2T: 0, nextCarAt: 0, customerNearDoor: false, bays: [], staff: {}, hold: null };
   var LOCKUP = { x: 5, z: 4, h: 3.6, doorW: 3.2, doorH: 3.0 };                 // half sizes: a 10 by 8 m lock-up, 3.6 m to the roof
+  var HALL2 = { x0: 5, x1: 15, z0: -4, z1: 4, doorX: 9 };                      // the two-bay garage (level 5): a second hall off the lock-up's east wall, in the lock-up's own frame
   var FORECOURT = { x: 16, z0: LOCKUP.z, z1: 22 }, ROAD_Z = 25, LANE = 1.6;      // the forecourt in front of the roll door, the road past it
   var BAY = { x: 5, z: 12 }, DESK = { x: -3.2, z: -2.6 }, DESK_STAND = { x: -3.2, z: -1.0 };   // where a car parks, where the desk stands, where a customer waits
+  var BAYS = [BAY, { x: 9.5, z: 12 }];                                          // the forecourt bays: the second is marked out when the garage grows
+  var ENTRY_X = 0.2, APRON_Z = 17;                                              // cars come in through the gap in the bollards and turn along the apron to their bay
   var OPEN_AT = 8, CLOSE_AT = 18, LAST_CAR_AT = 17;                              // the day: cars arrive from a quarter past eight to five
-  // the four faults of the lock-up (levels 1 to 4 in the plan): what the customer says, what the job is, how long it takes, what it pays
+  // the parts the supplier sells: what it costs you, what it goes on the invoice for, the level it comes into the catalogue
+  var PARTS = {
+    oil: { name: '5 L of oil', cost: 18, sell: 30, lvl: 1, col: 0xd8a52a },
+    oilfilter: { name: 'oil filter', cost: 6, sell: 12, lvl: 1, col: 0x2c5f9e },
+    pads: { name: 'brake pad set', cost: 22, sell: 45, lvl: 1, col: 0xb8322a },
+    bulb: { name: 'headlight bulb', cost: 2, sell: 6, lvl: 1, col: 0xeeeeee },
+    battery: { name: 'battery', cost: 55, sell: 95, lvl: 1, col: 0x2a2d33 },
+    wipers: { name: 'wiper blade pair', cost: 8, sell: 18, lvl: 2, col: 0x4f6a3a },
+    plugkit: { name: 'puncture plug kit', cost: 3, sell: 10, lvl: 2, col: 0xe0a02a },
+    airfilter: { name: 'air filter', cost: 7, sell: 15, lvl: 3, col: 0xf3efe4 },
+    plugs: { name: 'set of four spark plugs', cost: 12, sell: 26, lvl: 3, col: 0x7a8691 },
+    coolant: { name: 'coolant', cost: 8, sell: 16, lvl: 4, col: 0x5fd3b0 },
+    tyre: { name: 'tyre', cost: 45, sell: 80, lvl: 5, col: 0x1a1a1a },
+    exhaust: { name: 'exhaust section', cost: 60, sell: 110, lvl: 5, col: 0x8a8a8a },
+    discs: { name: 'brake disc pair', cost: 40, sell: 80, lvl: 6, col: 0x6a6f75 }
+  };
+  CO.table('PARTS', PARTS, 'the supplier catalogue: what a part costs you, what it sells for on the invoice, the level it opens');
+  // the jobs a car comes in with, opened by level: what the customer says, the job, the parts, the labour price, and what the shop needs
+  // (needs: an upgrade or a tool bought on the PC). The steps of each job are in 02-work.js
   var FAULTS = [
-    { id: 'oil', symptom: 'The oil light has been on since Tuesday.', job: 'an oil and filter change', secs: 8, price: 60 },
-    { id: 'brakes', symptom: 'It squeals every time I brake.', job: 'new front brake pads', secs: 10, price: 120 },
-    { id: 'bulb', symptom: 'The left headlight is out.', job: 'a headlight bulb', secs: 4, price: 15 },
-    { id: 'battery', symptom: 'It would not start this morning.', job: 'a new battery', secs: 6, price: 95 }
+    { id: 'oil', symptom: 'The oil light has been on since Tuesday.', job: 'an oil and filter change', parts: ['oil', 'oilfilter'], price: 45, lvl: 1 },
+    { id: 'brakes', symptom: 'It squeals every time I brake.', job: 'new front brake pads', parts: ['pads'], price: 70, lvl: 1 },
+    { id: 'bulb', symptom: 'The left headlight is out.', job: 'a headlight bulb', parts: ['bulb'], price: 12, lvl: 1 },
+    { id: 'battery', symptom: 'It would not start this morning.', job: 'a new battery', parts: ['battery'], price: 25, lvl: 1 },
+    { id: 'wipers', symptom: 'It smears all over the glass in the rain.', job: 'new wiper blades', parts: ['wipers'], price: 10, lvl: 2 },
+    { id: 'puncture', symptom: 'The front tyre keeps going flat.', job: 'a puncture repair', parts: ['plugkit'], price: 25, lvl: 2, needs: 'tyre' },
+    { id: 'airfilter', symptom: 'It feels sluggish and it drinks fuel.', job: 'a new air filter', parts: ['airfilter'], price: 15, lvl: 3 },
+    { id: 'plugs', symptom: 'It misfires when I pull away.', job: 'new spark plugs', parts: ['plugs'], price: 40, lvl: 3, needs: 'socket' },
+    { id: 'coolant', symptom: 'It runs hot in traffic.', job: 'a coolant top-up', parts: ['coolant'], price: 20, lvl: 4 },
+    { id: 'newtyre', symptom: 'The front tyre is worn down to the cord.', job: 'a new front tyre', parts: ['tyre'], price: 30, lvl: 5, needs: 'tyremachine' },
+    { id: 'exhaust', symptom: 'It rattles underneath and it is loud.', job: 'a new exhaust section', parts: ['exhaust'], price: 60, lvl: 5 },
+    { id: 'discs', symptom: 'It grinds when I brake.', job: 'new front discs and pads', parts: ['discs', 'pads'], price: 90, lvl: 6 }
   ];
-  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: how long each takes (secs) and what it pays');   // the editor's Settings tab tunes it
+  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: what the customer says, the parts, the labour price (price) and the level it opens');   // the editor's Settings tab tunes it
   var MAKES = ['Harlow Estate', 'Pennant 1.4', 'Kestrel Van', 'Dunmore Coupe', 'Alder Hatch', 'Brampton Saloon'];   // made-up makes, in the house look
   var NAMES = ['Mrs Okafor', 'Dan', 'Priya', 'Mr Holt', 'Lena', 'Sam', 'Mr Baptiste', 'Ruth'];
   CO.setup({ canvas: 'co-canvas', save: 'garageco', game: GAME, spawn: { x: 0, z: -1, yaw: Math.PI }, sun: { box: 40, far: 120, mapSize: 2048, target: [0, 0, 8] }, lightBudget: 8 });
@@ -24,25 +53,40 @@
   // the lock-up is one world item: the editor can move the whole building, and every rule about it (where it is indoors, the roof,
   // the walls, the doorway, where a customer waits) follows it. LO() is how far it stands from where the code built it
   function LO() { var it = G.lockup, b = G.lockBase; return it && b ? { x: it.position.x - b.x, z: it.position.z - b.z } : { x: 0, z: 0 }; }
-  function inLockup(x, z, m) { m = m || 0; var o = LO(); x -= o.x; z -= o.z; return Math.abs(x) < LOCKUP.x - m && Math.abs(z) < LOCKUP.z - m; }
+  function grown() { return !!(S && S.stage >= 2); }
+  function inHall2(x, z, m) { if (!grown()) return false; m = m || 0; var o = LO(); x -= o.x; z -= o.z; return x > HALL2.x0 + m && x < HALL2.x1 - m && z > HALL2.z0 + m && z < HALL2.z1 - m; }
+  function inLockup(x, z, m) { m = m || 0; var o = LO(); var lx = x - o.x, lz = z - o.z; return (Math.abs(lx) < LOCKUP.x - m && Math.abs(lz) < LOCKUP.z - m) || inHall2(x, z, m); }
   function inForecourt(x, z, m) { m = m || 0; return Math.abs(x) < FORECOURT.x - m && z > FORECOURT.z0 + m && z < FORECOURT.z1 - m; }
   function inDoorway(x, z) { var o = LO(); x -= o.x; z -= o.z; return Math.abs(x) < LOCKUP.doorW / 2 - 0.2 && Math.abs(z - LOCKUP.z) < 0.6; }
-  function deskStand() { var o = LO(); return { x: DESK_STAND.x + o.x, z: DESK_STAND.z + o.z }; }
-  function faultOf(car) { return FAULTS.filter(function (f) { return f.id === car.fault; })[0] || FAULTS[0]; }
+  function inDoorway2(x, z) { if (!grown()) return false; var o = LO(); x -= o.x; z -= o.z; return Math.abs(x - HALL2.doorX) < LOCKUP.doorW / 2 - 0.2 && Math.abs(z - LOCKUP.z) < 0.6; }
+  function inSideDoor(x, z) { if (!grown()) return false; var o = LO(); x -= o.x; z -= o.z; return Math.abs(x - LOCKUP.x) < 0.6 && Math.abs(z - 2.1) < 0.4; }
+  // where a customer stands at the desk: the second one waits a step along
+  function deskStand(i) { var o = LO(); return { x: DESK_STAND.x + o.x + (i || 0) * 0.9, z: DESK_STAND.z + o.z + (i || 0) * 0.3 }; }
+  function faultById(id) { return FAULTS.filter(function (f) { return f.id === id; })[0] || FAULTS[0]; }
+  function faultOf(car) { return faultById(car.fault); }
   GAME.floorY = function () { return 0; };
   // the plot around the lock-up: the ground you may walk on and where the editor may stand things. The forecourt can be widened and
   // the fence moved out in the editor, so the plot reaches well past both; walls and fences still stop you through their solids
   var PLOT = { x: FORECOURT.x + 24, z0: -LOCKUP.z - 12, z1: ROAD_Z + 4 };
-  GAME.insideWalk = function (x, z) { if (inLockup(x, z, 0.35) || inDoorway(x, z)) return true; if (inLockup(x, z, -0.45)) return false; return Math.abs(x) < PLOT.x && z > PLOT.z0 && z < PLOT.z1; };
+  GAME.insideWalk = function (x, z) { if (inLockup(x, z, 0.35) || inDoorway(x, z) || inDoorway2(x, z) || inSideDoor(x, z)) return true; if (inLockup(x, z, -0.45)) return false; return Math.abs(x) < PLOT.x && z > PLOT.z0 && z < PLOT.z1; };
   GAME.indoors = function (x, z) { return inLockup(x, z); };
   GAME.roofAt = function (x, z) { return inLockup(x, z) ? LOCKUP.h + 0.3 : 0; };
-  GAME.wallPlanes = function () { var X = LOCKUP.x, Z = LOCKUP.z, o = LO(); return [{ a: 'x', v: o.x - X + 0.17, n: 1, z0: o.z - Z, z1: o.z + Z }, { a: 'x', v: o.x + X - 0.17, n: -1, z0: o.z - Z, z1: o.z + Z }, { a: 'z', v: o.z - Z + 0.17, n: 1, x0: o.x - X, x1: o.x + X }, { a: 'z', v: o.z + Z - 0.17, n: -1, x0: o.x - X, x1: o.x + X }]; };
+  GAME.wallPlanes = function () {
+    var X = LOCKUP.x, Z = LOCKUP.z, o = LO(), w = [{ a: 'x', v: o.x - X + 0.17, n: 1, z0: o.z - Z, z1: o.z + Z }, { a: 'x', v: o.x + X - 0.17, n: -1, z0: o.z - Z, z1: o.z + Z }, { a: 'z', v: o.z - Z + 0.17, n: 1, x0: o.x - X, x1: o.x + X }, { a: 'z', v: o.z + Z - 0.17, n: -1, x0: o.x - X, x1: o.x + X }];
+    if (grown()) w.push({ a: 'x', v: o.x + X + 0.17, n: 1, z0: o.z - Z, z1: o.z + Z }, { a: 'x', v: o.x + HALL2.x1 - 0.17, n: -1, z0: o.z - Z, z1: o.z + Z }, { a: 'z', v: o.z - Z + 0.17, n: 1, x0: o.x + HALL2.x0, x1: o.x + HALL2.x1 }, { a: 'z', v: o.z + Z - 0.17, n: -1, x0: o.x + HALL2.x0, x1: o.x + HALL2.x1 });
+    return w;
+  };
   GAME.editClamp = function (pt) { if (inLockup(pt.x, pt.z)) return { x: pt.x, z: pt.z }; return { x: clamp(pt.x, -PLOT.x + 0.5, PLOT.x - 0.5), z: clamp(pt.z, PLOT.z0 + 0.5, PLOT.z1 - 0.5) }; };
   GAME.stepSurface = function (x, z) { return inLockup(x, z) ? 'floor' : 'outside'; };
   GAME.catalogueGroups = [['garage', '🔧 The workshop'], ['yard', '🌳 The forecourt']];
-  // the roll door is yours to open; while it is down nobody walks through the doorway (a customer has it opened for them)
-  GAME.collides = function (x, z) { return !S.doorOpen && G.rollT < 0.7 && inDoorway(x, z); };
-  GAME.doorOpeners = function () { return G.customer && G.customer.walking ? [{ x: G.customer.rec.x, z: G.customer.rec.z }] : []; };
+  // the roll doors are yours to open; while one is down nobody walks through its doorway (a customer has it opened for them)
+  GAME.collides = function (x, z) { return (!S.doorOpen && G.rollT < 0.7 && inDoorway(x, z)) || (!S.door2Open && G.roll2T < 0.7 && inDoorway2(x, z)); };
+  // people with keys: the customers, and the staff (02-staff.js)
+  GAME.doorOpeners = function () {
+    var out = []; G.bays.forEach(function (B) { var c = B && B.customer; if (c && c.walking) out.push({ x: c.rec.x, z: c.rec.z }); });
+    staffList().forEach(function (w) { var R = G.staff[w.id]; if (R && R.rec.path && R.rec.path.length) out.push({ x: R.rec.x, z: R.rec.z }); });
+    return out;
+  };
 
   // ── The building ──────────────────────────────────────────────────
   GAME.buildWorld = function (loaded) {
@@ -52,8 +96,9 @@
     var fc = plane(2 * FORECOURT.x + 2, FORECOURT.z1 - FORECOURT.z0 + 1.2, MAT.yard, 0, 0, (FORECOURT.z0 + FORECOURT.z1) / 2 + 0.6, -Math.PI / 2); fc.receiveShadow = true;
     plane(180, 7.5, MAT.yard, 0, 0, ROAD_Z, -Math.PI / 2); plane(180, 0.12, MAT.whiteLine, 0, 0.004, ROAD_Z, -Math.PI / 2);
     box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, -(FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75); box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, (FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75);
-    // the bay: two white lines and an end mark
+    // the bay: two white lines and an end mark; the second bay is marked out once the garage has grown
     box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x - 1.5, 0.01, BAY.z); box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x + 1.5, 0.01, BAY.z); box(3.0, 0.02, 0.1, MAT.whiteLine, BAY.x, 0.01, BAY.z - 2.7);
+    if (grown()) { var B2 = BAYS[1]; box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x + 1.5, 0.01, B2.z); box(3.0, 0.02, 0.1, MAT.whiteLine, B2.x, 0.01, B2.z - 2.7); sign(['BAY 2'], 1.2, 0.3, B2.x, 0.02, B2.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; }
     // the lock-up: a slab, block walls (the roll door opening in the south wall, the side door in the east wall), a roof and two skylights.
     // All of it is one world item, so the editor moves the building as a whole and the rules above follow it
     worldItem('lock-up', function () { G.lockup = WORLD_PARENT;
@@ -82,8 +127,10 @@
     cyl(0.012, 1.3, MAT.chrome, DW / 2 + 0.35, 1.55, Z - 0.22, null, 6);
     hitBox(0.4, 1.4, 0.4, DW / 2 + 0.35, 1.5, Z - 0.22, { prompt: function () { return (S.doorOpen ? 'Pull the chain: close' : 'Pull the chain: open') + ' the roll door'; }, use: function () { S.doorOpen = !S.doorOpen; sfx(S.doorOpen ? 'unlock' : 'lock'); hudDirty = true; } });
     sign(['GARAGE CO.'], 4.2, 0.9, 0, H + 0.75, Z + 0.22, 0, { bg: '#1b232c' });
+    buildLift(0);
     }, null);
     if (G.lockup) { G.lockBase = { x: G.lockup.position.x, z: G.lockup.position.z }; G.lockup.userData.movesOnly = true; }   // the rules follow where it stands, not a turn or a new size
+    if (G.lockup && grown()) buildHall2();
     // the forecourt: two trees, a lamp post, the sky, the road's traffic. The fence down both sides is made of fence section props
     // (placed in src/00-layout.js), so it moves, goes and grows in the editor like anything else
     tree(-20, 10, 1.2); tree(21, 18, 0.9); tree(-9, -8, 1.0); lampPost(12, 6, 0, 5);
@@ -93,19 +140,90 @@
     buildProps();
     navSetup({ x0: -PLOT.x, z0: PLOT.z0, width: 2 * PLOT.x, depth: PLOT.z1 - PLOT.z0 + 2, cell: 0.4 });
   };
+  // ── The two-bay garage ────────────────────────────────────────────
+  // At level 5 the lock-up grows east overnight: a second hall the same size, with its own roll door onto bay 2, a parts store along the
+  // back wall, an office in the far corner with the second PC, and a waiting corner by the door. The old east wall stays as the wall
+  // between the halls and the side door is the way through. It is built into the lock-up's own world item, after the item has been
+  // centred, so the item keeps its key and wherever the editor stood the lock-up the new hall stands beside it
+  function buildHall2() {
+    var g = G.lockup, b = G.lockBase, n0 = solids.length, prev = WORLD_PARENT, X0 = HALL2.x0, X1 = HALL2.x1, Z = LOCKUP.z, H = LOCKUP.h, DW = LOCKUP.doorW, DH = LOCKUP.doorH, cx = (X0 + X1) / 2, W = X1 - X0;
+    WORLD_PARENT = g;
+    try {
+      var bx = function (w, h, d, mat, x, y, z) { return box(w, h, d, mat, x - b.x, y, z - b.z); };
+      var sol = function (x0, x1, z0, z1) { solid(x0, x1, z0, z1); };
+      var slab = plane(W, 2 * Z, MAT.floor, cx - b.x, 0.01, -b.z, -Math.PI / 2); slab.receiveShadow = true;
+      bx(W + 0.3, H, 0.3, MAT.block, cx, H / 2, -Z); sol(X0, X1 + 0.15, -Z - 0.15, -Z + 0.15);
+      bx(0.3, H, 2 * Z + 0.3, MAT.block, X1, H / 2, 0); sol(X1 - 0.15, X1 + 0.15, -Z - 0.15, Z + 0.15);
+      var d0 = HALL2.doorX - DW / 2, d1 = HALL2.doorX + DW / 2;
+      bx(d0 - X0, H, 0.3, MAT.block, (X0 + d0) / 2, H / 2, Z); bx(X1 - d1, H, 0.3, MAT.block, (d1 + X1) / 2, H / 2, Z); bx(DW + 0.4, H - DH, 0.3, MAT.block, HALL2.doorX, DH + (H - DH) / 2, Z);
+      sol(X0, d0, Z - 0.15, Z + 0.15); sol(d1, X1 + 0.15, Z - 0.15, Z + 0.15);
+      bx(W + 0.6, 0.25, 2 * Z + 0.6, MAT.roof, cx, H + 0.125, 0); plane(W, 2 * Z, MAT.roofIn, cx - b.x, H - 0.01, -b.z, Math.PI / 2);
+      // windows high on the long walls: light in, no view of the street at eye height
+      [cx - 2.5, cx + 2.5].forEach(function (x) { var sk = plane(1.6, 1.2, MAT.skylight, x - b.x, H - 0.02, -1 - b.z, Math.PI / 2); lampMeshes.push(sk); });
+      [cx - 3, cx, cx + 3].forEach(function (x) { bx(1.6, 0.5, 0.06, MAT.skylight, x, H - 0.55, -Z + 0.17); });
+      [-1.5, 1.5].forEach(function (z) { bx(W - 0.4, 0.3, 0.2, MAT.steelDark, cx, H - 0.25, z); });
+      [[cx - 2.5, -1.5], [cx + 2.5, 1.5]].forEach(function (p) { highBay(p[0] - b.x, H - 0.95, p[1] - b.z, H); var l = new THREE.PointLight(0xffeacc, 0.6, 14, 2); l.position.set(p[0] - b.x, H - 1.2, p[1] - b.z); g.add(l); G.lamps.push(l); });
+      // the roll door onto bay 2, on a chain like the first
+      G.roll2 = new THREE.Group(); G.roll2.userData.dynamic = true; G.roll2.position.set(HALL2.doorX - b.x, 0, Z - b.z); g.add(G.roll2);
+      G.roll2Panel = box(DW, DH, 0.08, MAT.door, 0, DH / 2, 0, G.roll2); G.roll2Panel.castShadow = false;
+      bx(DW + 0.4, 0.42, 0.46, MAT.steelDark, HALL2.doorX, DH + 0.24, Z - 0.3);
+      hitBox(0.4, 1.4, 0.4, HALL2.doorX + DW / 2 + 0.35 - b.x, 1.5, Z - 0.22 - b.z, { prompt: function () { return (S.door2Open ? 'Pull the chain: close' : 'Pull the chain: open') + ' the bay 2 roll door'; }, use: function () { S.door2Open = !S.door2Open; sfx(S.door2Open ? 'unlock' : 'lock'); hudDirty = true; } });
+      sign(['BAY 2'], 1.6, 0.5, HALL2.doorX - b.x, H + 0.55, Z + 0.22 - b.z, 0, { bg: '#1b232c' });
+      // the parts store: shelving along the back wall, west half (the stock boxes on it are drawn by 02-stock.js)
+      G.store2 = new THREE.Group(); G.store2.position.set(X0 + 2.4 - b.x, 0, -Z + 0.55 - b.z); g.add(G.store2);
+      [-1.9, 0, 1.9].forEach(function (x) { box(0.05, 2.2, 0.5, MAT.rack, x, 1.1, 0, G.store2); }); [0.35, 0.95, 1.55, 2.1].forEach(function (y) { box(3.85, 0.04, 0.5, MAT.steel, 0, y, 0, G.store2); });
+      sol(X0 + 0.45, X0 + 4.35, -Z + 0.25, -Z + 0.85);
+      G.store2Boxes = new THREE.Group(); G.store2Boxes.userData.dynamic = true; G.store2.add(G.store2Boxes);
+      hitBox(3.8, 2.0, 0.6, X0 + 2.4 - b.x, 1.1, -Z + 0.6 - b.z, { prompt: function () { return rackPrompt(); }, use: function () { rackUse(); } });
+      // the office: two glazed walls in the north-east corner, a door gap, a desk with the second PC (a prop, so it can be moved)
+      var ox0 = X1 - 4, oz1 = -0.6;
+      bx(0.12, H - 0.4, 3.4 - 1.0, MAT.plaster, ox0, (H - 0.4) / 2, -Z + 1.7 - 0.5); sol(ox0 - 0.06, ox0 + 0.06, -Z, oz1 - 1.0);
+      bx(0.12, H - 2.5, 1.0, MAT.plaster, ox0, 2.1 + (H - 2.5) / 2, oz1 - 0.5);
+      bx(4.0, 1.0, 0.12, MAT.plaster, X1 - 2, 0.5, oz1); bx(4.0, 0.8, 0.06, MAT.skylight, X1 - 2, 1.4, oz1); bx(4.0, H - 2.2, 0.12, MAT.plaster, X1 - 2, 1.8 + (H - 2.2) / 2, oz1); sol(ox0, X1, oz1 - 0.06, oz1 + 0.06);
+      sign(['OFFICE'], 0.9, 0.24, ox0 - 0.07 - b.x, 2.3, -2.8 - b.z, -Math.PI / 2, { bg: '#1b232c' });
+      // the waiting corner: two chairs and a coffee machine by the front wall
+      [X1 - 2.2, X1 - 1.4].forEach(function (x) { bx(0.5, 0.06, 0.5, MAT.red, x, 0.45, Z - 0.7); bx(0.5, 0.5, 0.06, MAT.red, x, 0.72, Z - 0.45); bx(0.04, 0.45, 0.04, MAT.steelDark, x, 0.22, Z - 0.7); });
+      bx(0.5, 1.5, 0.5, MAT.black, X1 - 0.5, 0.75, Z - 0.6); bx(0.36, 0.3, 0.04, glowMat(0xf5b53d, 0.5), X1 - 0.5, 1.15, Z - 0.84);
+      sol(X1 - 2.5, X1 - 0.2, Z - 1.0, Z - 0.3);
+      // the doorway between the halls is the old side door; its box keeps the lights apart a little
+      lineWall('z', -Z, X0, X1, H - 0.4, MAT.plaster, [], 1, { inset: 0.16 }); lineWall('x', X1, -Z, Z, H - 0.4, MAT.plaster, [], -1, { inset: 0.16 });
+      buildLift(1, b.x, b.z);
+    } finally { WORLD_PARENT = prev; }
+    // the solids of the new hall are in the lock-up's frame as built; they join the item's own so an editor move takes them along
+    var mine = solids.slice(n0); g.userData.solids = (g.userData.solids || []).concat(mine);
+    tickRoll2(1);
+  }
   // the roll door rides up into its box while open, or while a customer walks through; the shadow map follows it
   function tickRoll(dt) {
     var want = S.doorOpen || G.customerNearDoor ? 1 : 0;
+    tickRoll2(dt);
     if (Math.abs(G.rollT - want) < 0.002) return;
     G.rollT = lerp(G.rollT, want, 1 - Math.pow(0.03, dt)); if (Math.abs(G.rollT - want) < 0.004) G.rollT = want;
     var sy = 1 - G.rollT * 0.94; G.rollPanel.scale.y = sy; G.rollPanel.position.y = LOCKUP.doorH - (LOCKUP.doorH * sy) / 2; shadowDirty = true;
   }
+  function tickRoll2(dt) {
+    if (!G.roll2Panel) return; var want = S.door2Open || G.customerNearDoor2 ? 1 : 0;
+    if (Math.abs(G.roll2T - want) < 0.002 && dt < 1) return;
+    G.roll2T = dt >= 1 ? want : lerp(G.roll2T, want, 1 - Math.pow(0.03, dt)); if (Math.abs(G.roll2T - want) < 0.004) G.roll2T = want;
+    var sy = 1 - G.roll2T * 0.94; G.roll2Panel.scale.y = sy; G.roll2Panel.position.y = LOCKUP.doorH - (LOCKUP.doorH * sy) / 2; shadowDirty = true;
+  }
 
   // ── The props: the lock-up's fittings, and two extras for the catalogue ──
   var CHROME_RED = std({ color: 0xc8342a, roughness: 0.45, metalness: 0.3 });
+  // the tool wall: the hand tools a job asks for hang on it (02-work.js has the list). E takes one off its hook or hangs the one in
+  // your hand back; a hook you have taken from shows its painted outline. Tools the shop has not bought yet are not on it
   defProp('toolWall', { label: 'tool wall', cat: 'garage', wall: true, x: 1.5, z: -3.83, rot: 0, build: function (c) {
-    c.box(2.4, 1.2, 0.04, MAT.wood, 0, 1.5, 0); for (var i = 0; i < 9; i++) { var x = -1.05 + i * 0.26; c.cyl(0.012, 0.3, MAT.steel, x, 1.75 - (i % 3) * 0.12, 0.05, 6); c.box(0.06, 0.05, 0.03, MAT.rubber, x, 1.62 - (i % 3) * 0.12, 0.05); }
+    c.box(2.4, 1.2, 0.04, MAT.wood, 0, 1.5, 0); for (var i = 0; i < 5; i++) { var x = 0.15 + i * 0.22; c.cyl(0.012, 0.3, MAT.steel, x, 1.75 - (i % 3) * 0.12, 0.05, 6); c.box(0.06, 0.05, 0.03, MAT.rubber, x, 1.62 - (i % 3) * 0.12, 0.05); }
     c.sign(['TOOLS', 'put it back where you found it'], 1.4, 0.3, 0, 2.3, 0.03, 0, { bg: '#1b232c' });
+    var dg = c.dynGroup(); G.toolHooks = {};
+    TOOL_IDS.forEach(function (t, k) {
+      var x = -1.0 + k * 0.28, T = TOOLS[t], hook = new THREE.Group(); hook.position.set(x, 1.5, 0.05); dg.add(hook);
+      box(0.2, 0.5, 0.005, std({ color: 0xf5f1e6, roughness: 1 }), 0, 0, -0.012, hook);   // the painted outline
+      var tool = new THREE.Group(); hook.add(tool); box(0.04, T.len, 0.03, T.mat || MAT.chrome, 0, 0, 0, tool); box(T.headW || 0.1, 0.06, 0.04, MAT.steelDark, 0, T.len / 2, 0, tool);
+      G.toolHooks[t] = { hook: hook, tool: tool };
+      c.hit(0.24, 0.6, 0.12, x, 1.5, 0.06, { prompt: function () { return toolPrompt(t); }, use: function () { toolUse(t); } });
+    });
+    toolWallSync();
   } });
   defProp('bench', { label: 'workbench', cat: 'garage', x: -3.6, z: 0.6, rot: 1, build: function (c) {
     c.box(2.2, 0.08, 0.8, MAT.wood, 0, 0.9, 0); c.box(2.1, 0.5, 0.7, MAT.steelDark, 0, 0.3, 0); [-0.95, 0.95].forEach(function (x) { c.box(0.08, 0.86, 0.7, MAT.steelDark, x, 0.43, 0); });
@@ -116,10 +234,18 @@
   } });
   defProp('desk', { label: 'desk', cat: 'garage', x: DESK.x, z: DESK.z, rot: 0, build: function (c) {
     c.box(1.6, 0.06, 0.8, MAT.wood, 0, 0.78, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, -0.72, 0.38, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, 0.72, 0.38, 0); c.box(0.5, 0.6, 0.6, MAT.steelDark, 0.45, 0.3, 0);
-    c.box(0.32, 0.02, 0.44, MAT.paper, -0.3, 0.82, 0.05); c.box(0.3, 0.2, 0.02, MAT.black, 0.35, 0.92, -0.25);
+    c.box(0.32, 0.02, 0.44, MAT.paper, -0.3, 0.82, 0.05);
     c.hit(0.5, 0.2, 0.5, -0.3, 0.9, 0.05, { prompt: function () { return 'Read the clipboard: the jobs'; }, use: function () { openPanel('jobs'); } });
+    // the shop PC: the parts supplier, the stock, the jobs, the staff, the garage and the books (02-pc.js draws it)
+    pcBuild(c, 0.38, 0.81, -0.22, 'desk');
     c.solid(-0.8, 0.8, -0.4, 0.4, 0, 0.85);
   } });
+  // the office desk in the two-bay garage, with the second PC on the same accounts
+  defProp('officeDesk', { label: 'office desk', cat: 'garage', x: 13.2, z: -5.1, rot: 0, desc: 'The office in the two-bay garage: a desk and the second PC.', build: function (c) {
+    c.box(1.6, 0.06, 0.8, MAT.wood, 0, 0.78, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, -0.72, 0.38, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, 0.72, 0.38, 0);
+    c.box(0.5, 0.45, 0.04, MAT.cork, -0.4, 1.5, -0.38); pcBuild(c, 0.2, 0.81, -0.15, 'office'); c.solid(-0.8, 0.8, -0.4, 0.4, 0, 0.85);
+  } });
+  GAME.propAllowed = function (id) { return id !== 'officeDesk' || grown(); };
   defProp('jack', { label: 'trolley jack', cat: 'garage', x: 1.4, z: 1.2, rot: 0, build: function (c) {
     c.box(0.3, 0.12, 0.7, CHROME_RED, 0, 0.1, 0); c.cyl(0.06, 0.1, MAT.steel, 0, 0.21, -0.1, 12); var h = c.cyl(0.015, 1.0, MAT.steelDark, 0, 0.55, 0.55, 6); h.rotation.x = 0.9;
     [[0.13, -0.28], [-0.13, -0.28], [0.13, 0.3], [-0.13, 0.3]].forEach(function (p) { var w = c.cyl(0.05, 0.04, MAT.rubber, p[0], 0.05, p[1], 10); w.rotation.z = Math.PI / 2; });
@@ -130,9 +256,11 @@
     c.solid(-0.5, 0.5, -0.2, 0.2, 0, 0.75);
   } });
   defProp('drum', { label: 'oil drum', cat: 'garage', x: 4.2, z: -0.5, rot: 0, build: function (c) { c.cyl(0.3, 0.9, MAT.blue, 0, 0.45, 0, 16); c.cyl(0.31, 0.03, MAT.steelDark, 0, 0.3, 0, 16); c.cyl(0.31, 0.03, MAT.steelDark, 0, 0.6, 0, 16); c.solid(-0.32, 0.32, -0.32, 0.32, 0, 0.9); } });
+  // the parts rack: the stock lives on it as boxes, one colour a part (02-stock.js draws them). E takes the parts for the job in hand
   defProp('rack', { label: 'parts rack', cat: 'garage', x: 4.5, z: -2.2, rot: 3, build: function (c) {
     [-0.9, 0.9].forEach(function (x) { c.box(0.05, 2.0, 0.4, MAT.rack, x, 1.0, 0); }); [0.4, 1.0, 1.6].forEach(function (y) { c.box(1.85, 0.04, 0.4, MAT.steel, 0, y, 0); });
-    c.box(0.3, 0.3, 0.3, MAT.wood, -0.5, 0.57, 0); c.box(0.4, 0.2, 0.25, MAT.black, 0.3, 1.12, 0); c.box(0.5, 0.15, 0.3, MAT.yellow, -0.4, 1.7, 0);
+    G.rackBoxes = c.dynGroup(); stockDraw();
+    c.hit(1.9, 1.9, 0.5, 0, 1.0, 0, { prompt: function () { return rackPrompt(); }, use: function () { rackUse(); } });
     c.solid(-0.95, 0.95, -0.22, 0.22, 0, 2.0);
   } });
   defProp('noticeBoard', { label: 'notice board', cat: 'garage', wall: true, x: -4.83, z: -2.6, rot: 1, build: function (c) { c.box(1.2, 0.9, 0.04, MAT.wood, 0, 1.7, 0); c.plane(1.1, 0.8, MAT.cork, 0, 1.7, 0.025, 0, 0); c.sign(['OPEN 8 TO 6'], 0.5, 0.16, 0.2, 1.9, 0.03, 0, { bg: '#f3efe4', fg: '#1b232c' }); } });

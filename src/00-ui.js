@@ -24,11 +24,15 @@
       },
       {
         "label": "Job",
-        "value": "S.job ? ({ coming: 'car on its way', waiting: 'customer at the desk', taken: 'find the fault', fixing: 'fixing', done: 'fixed, take the money', paid: 'paid', leaving: 'leaving' })[S.job.state] || S.job.state : 'no job'"
+        "value": "jobChip()"
       },
       {
         "label": "Roll door",
         "value": "S.doorOpen ? 'open' : 'closed'"
+      },
+      {
+        "label": "Hands",
+        "value": "handLine()"
       }
     ],
     "panels": {},
