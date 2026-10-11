@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.12.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.12.2', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -1407,7 +1407,7 @@
     if (!b.isEmpty()) { var cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2; g.children.forEach(function (c) { c.position.x -= cx; c.position.z -= cz; }); g.position.set(cx, 0, cz); g.updateMatrixWorld(true); }
     return out;
   }
-  function wr(v) { return Math.round(v * 100) / 100; }
+  function worldRound(v) { return Math.round(v * 100) / 100; }
   // the things at the top of the world that count as items: not props, people, doors, cars, lights, helpers, the sky or the bake
   function worldCandidate(o) {
     if (!o || o === CO.root || o.userData.editor || o.userData.baked || o.userData.dynamic || o.userData.legs || o.userData.person || o.userData.propId) return false;
@@ -1421,7 +1421,7 @@
   }
   function worldKind(o) {
     if (o.userData.worldItem) return o.userData.worldItem;
-    if (o.isMesh) { var P = o.geometry.parameters || {}, t = (o.geometry.type || 'mesh').replace(/Geometry$/, '').toLowerCase(); var dims = ['width', 'height', 'depth', 'radius', 'radiusTop'].filter(function (k) { return typeof P[k] === 'number'; }).map(function (k) { return wr(P[k]); }).join('x'); return 'mesh ' + t + (dims ? ' ' + dims : ''); }
+    if (o.isMesh) { var P = o.geometry.parameters || {}, t = (o.geometry.type || 'mesh').replace(/Geometry$/, '').toLowerCase(); var dims = ['width', 'height', 'depth', 'radius', 'radiusTop'].filter(function (k) { return typeof P[k] === 'number'; }).map(function (k) { return worldRound(P[k]); }).join('x'); return 'mesh ' + t + (dims ? ' ' + dims : ''); }
     return o.name || 'group';
   }
   function worldName(o) { var k = worldKind(o); return /^mesh /.test(k) ? k.replace(/^mesh (\w+).*/, '$1') + (o.material && matName(o.material) ? ' · ' + matName(o.material) : '') : k; }
@@ -1438,7 +1438,7 @@
     (CO.root && CO.root !== scene ? [scene, CO.root] : [scene]).forEach(function (r) { r.children.forEach(function (o) { (o.userData.solids || []).forEach(function (s) { claimed.push(s); }); }); });   /* a kit item's own solids are not up for claiming */
     (CO.root && CO.root !== scene ? [scene, CO.root] : [scene]).forEach(function (r) { r.children.slice().forEach(function (o) {
       if (!worldCandidate(o) || o.userData.worldKey) { if (o.userData.worldKey) WORLD_ITEMS.push(o); return; }
-      var base = worldKind(o) + '@' + wr(o.position.x) + ',' + wr(o.position.z) + (Math.abs(o.position.y) > 0.005 ? ',' + wr(o.position.y) : ''), key = base, n = 1;
+      var base = worldKind(o) + '@' + worldRound(o.position.x) + ',' + worldRound(o.position.z) + (Math.abs(o.position.y) > 0.005 ? ',' + worldRound(o.position.y) : ''), key = base, n = 1;
       while (seen[key]) key = base + '#' + (++n); seen[key] = true;
       if (!o.userData.worldItem && o.isMesh && !o.userData.solids) worldClaimSolids(o, claimed);   /* a wall drawn as a plain box takes the solid laid on its footprint */
       o.userData.worldKey = key; o.userData.worldBase = { x: o.position.x, y: o.position.y, z: o.position.z, ry: o.rotation.y, sx: o.scale.x, sy: o.scale.y, sz: o.scale.z };
@@ -1491,12 +1491,12 @@
   function worldCopyRemove(g) { var c = g.userData.worldCopy; if (g.parent) g.parent.remove(g); (g.userData.solids || []).forEach(function (s) { var k = solids.indexOf(s); if (k >= 0) solids.splice(k, 1); }); var a = WORLD_COPIES.indexOf(c); if (a >= 0) WORLD_COPIES.splice(a, 1); var b = WORLD_ITEMS.indexOf(g); if (b >= 0) WORLD_ITEMS.splice(b, 1); if (typeof NAV === 'object' && NAV) NAV.dirty = true; shadowDirty = true; }
   // what the editor keeps: the item as it stands now against where the game built it
   function worldRecord(o) {
-    if (o.userData.worldCopy) { var c = o.userData.worldCopy; c.x = wr(o.position.x); c.y = wr(o.position.y); c.z = wr(o.position.z); c.ry = Math.round(o.rotation.y * 180 / Math.PI * 10) / 10; c.sx = wr(o.scale.x); c.sy = wr(o.scale.y); c.sz = wr(o.scale.z); worldSolids(o); return c; }
+    if (o.userData.worldCopy) { var c = o.userData.worldCopy; c.x = worldRound(o.position.x); c.y = worldRound(o.position.y); c.z = worldRound(o.position.z); c.ry = Math.round(o.rotation.y * 180 / Math.PI * 10) / 10; c.sx = worldRound(o.scale.x); c.sy = worldRound(o.scale.y); c.sz = worldRound(o.scale.z); worldSolids(o); return c; }
     var b0 = o.userData.worldBase, key = o.userData.worldKey; if (!b0 || !key) return null;
     var e = {}, near = function (a, b) { return Math.abs(a - b) < 0.0005; };
-    if (!near(o.position.x, b0.x)) e.x = wr(o.position.x); if (!near(o.position.y, b0.y)) e.y = wr(o.position.y); if (!near(o.position.z, b0.z)) e.z = wr(o.position.z);
+    if (!near(o.position.x, b0.x)) e.x = worldRound(o.position.x); if (!near(o.position.y, b0.y)) e.y = worldRound(o.position.y); if (!near(o.position.z, b0.z)) e.z = worldRound(o.position.z);
     if (!near(o.rotation.y, b0.ry)) e.ry = Math.round(o.rotation.y * 180 / Math.PI * 10) / 10;
-    if (!near(o.scale.x, b0.sx)) e.sx = wr(o.scale.x); if (!near(o.scale.y, b0.sy)) e.sy = wr(o.scale.y); if (!near(o.scale.z, b0.sz)) e.sz = wr(o.scale.z);
+    if (!near(o.scale.x, b0.sx)) e.sx = worldRound(o.scale.x); if (!near(o.scale.y, b0.sy)) e.sy = worldRound(o.scale.y); if (!near(o.scale.z, b0.sz)) e.sz = worldRound(o.scale.z);
     if (!o.visible) e.hidden = true;
     if (Object.keys(e).length) WORLD_EDITS[key] = e; else delete WORLD_EDITS[key];
     worldSolids(o); return e;
@@ -1556,16 +1556,16 @@
   // lane of higher opt.prio it merges into (a roundabout's ring) and slows for a tight curve (opt.r, its radius). A lane end
   // that leads nowhere sends the car back to a lane nothing leads into, so an open road behaves like the wrapping lanes above.
   // The cars sit in traffic.cars beside the lane cars, flagged road: true. The dev command 'lanes' draws the network.
-  var ROADS = { src: [], net: null, sig: '', checkT: 0, want: 0, cars: [], dbg: null, seq: 0 };
-  function roadLane(points, opt) { var s = { pts: points.map(function (p) { return [p[0], p[1]]; }), opt: opt || {}, g: null, prop: null, n: ++ROADS.seq }; ROADS.src.push(s); ROADS.sig = ''; return s; }
+  var ROADNET = { src: [], net: null, sig: '', checkT: 0, want: 0, cars: [], dbg: null, seq: 0 };
+  function roadLane(points, opt) { var s = { pts: points.map(function (p) { return [p[0], p[1]]; }), opt: opt || {}, g: null, prop: null, n: ++ROADNET.seq }; ROADNET.src.push(s); ROADNET.sig = ''; return s; }
   function roadLaneLocal(g, prop, points, opt) { var s = roadLane(points, opt); s.g = g; s.prop = prop; return s; }
-  function roadDropProp(prop) { var n = ROADS.src.length; ROADS.src = ROADS.src.filter(function (s) { return s.prop !== prop; }); if (ROADS.src.length !== n) ROADS.sig = ''; }
+  function roadDropProp(prop) { var n = ROADNET.src.length; ROADNET.src = ROADNET.src.filter(function (s) { return s.prop !== prop; }); if (ROADNET.src.length !== n) ROADNET.sig = ''; }
   function roadLive(g) { for (var o = g; o; o = o.parent) { if (o === scene) return true; } return false; }
-  function roadSig() { var parts = [ROADS.src.length]; ROADS.src.forEach(function (s) { if (!s.g) return; var p = s.g.position; parts.push(s.n, Math.round(p.x * 20), Math.round(p.z * 20), Math.round(s.g.rotation.y * 100), roadLive(s.g) ? 1 : 0); }); return parts.join(','); }
+  function roadSig() { var parts = [ROADNET.src.length]; ROADNET.src.forEach(function (s) { if (!s.g) return; var p = s.g.position; parts.push(s.n, Math.round(p.x * 20), Math.round(p.z * 20), Math.round(s.g.rotation.y * 100), roadLive(s.g) ? 1 : 0); }); return parts.join(','); }
   function roadNet() {
     var v = new THREE.Vector3(), lanes = [];
-    ROADS.src = ROADS.src.filter(function (s) { return !s.g || roadLive(s.g); });
-    ROADS.src.forEach(function (s) {
+    ROADNET.src = ROADNET.src.filter(function (s) { return !s.g || roadLive(s.g); });
+    ROADNET.src.forEach(function (s) {
       if (s.g) s.g.updateMatrixWorld(true);
       var pts = s.pts.map(function (p) { if (s.g) { v.set(p[0], 0, p[1]).applyMatrix4(s.g.matrixWorld); return [v.x, v.y, v.z]; } return [p[0], s.opt.y || 0, p[1]]; });
       if (pts.length < 2) return;
@@ -1592,26 +1592,26 @@
     out.x = a[0] + (b[0] - a[0]) * t; out.y = a[1] + (b[1] - a[1]) * t; out.z = a[2] + (b[2] - a[2]) * t; out.yaw = Math.atan2(-(b[2] - a[2]), b[0] - a[0]); return out;
   }
   function roadPick(L) { return L.next.length ? L.next[Math.floor(Math.random() * L.next.length)] : null; }
-  function roadFree(L, s, skip) { var p = lanePoint(L, s, {}); for (var i = 0; i < ROADS.cars.length; i++) { var d = ROADS.cars[i]; if (d === skip || d.parked) continue; if (d.lane === L && Math.abs(d.s - s) < 9) return false; if (Math.hypot(d.g.position.x - p.x, d.g.position.z - p.z) < 7) return false; } return true; }
+  function roadFree(L, s, skip) { var p = lanePoint(L, s, {}); for (var i = 0; i < ROADNET.cars.length; i++) { var d = ROADNET.cars[i]; if (d === skip || d.parked) continue; if (d.lane === L && Math.abs(d.s - s) < 9) return false; if (Math.hypot(d.g.position.x - p.x, d.g.position.z - p.z) < 7) return false; } return true; }
   function roadPlace(c, L, s) { c.lane = L; c.src = L.src; c.s = s; c.next = roadPick(L); c.wait = 0; c.parked = false; c.g.visible = true; var p = lanePoint(L, s, {}); c.g.position.set(p.x, p.y, p.z); c.yaw = p.yaw; c.g.rotation.y = p.yaw; }
   function roadPark(c) { c.parked = true; c.lane = null; c.next = null; c.v = 0; c.g.visible = false; }
   function roadSeat(c, anywhere) {
-    var net = ROADS.net; if (!net || !net.lanes.length) { roadPark(c); return false; }
+    var net = ROADNET.net; if (!net || !net.lanes.length) { roadPark(c); return false; }
     var pool = anywhere ? net.lanes.filter(function (l) { return !l.box && l.len > 4; }) : net.entries; if (!pool.length) pool = net.lanes;
     for (var k = 0; k < 8; k++) { var L = pool[Math.floor(Math.random() * pool.length)], s = anywhere ? Math.random() * L.len : 0; if (roadFree(L, s, c)) { roadPlace(c, L, s); c.v = anywhere ? c.vmax * 0.6 : Math.min(c.vmax, L.vmax) * 0.7; return true; } }
     roadPark(c); return false;
   }
   function roadReseat() {
-    var byNode = new Map(); ROADS.net.lanes.forEach(function (l) { byNode.set(l.src, l); });
-    ROADS.cars.forEach(function (c) { if (c.parked) return; var L = byNode.get(c.src); if (L) { c.lane = L; c.s = Math.min(c.s, L.len); if (!c.next || L.next.indexOf(c.next) < 0) { var nn = c.next && byNode.get(c.next.src); c.next = nn && L.next.indexOf(nn) >= 0 ? nn : roadPick(L); } } else roadSeat(c, true); });
+    var byNode = new Map(); ROADNET.net.lanes.forEach(function (l) { byNode.set(l.src, l); });
+    ROADNET.cars.forEach(function (c) { if (c.parked) return; var L = byNode.get(c.src); if (L) { c.lane = L; c.s = Math.min(c.s, L.len); if (!c.next || L.next.indexOf(c.next) < 0) { var nn = c.next && byNode.get(c.next.src); c.next = nn && L.next.indexOf(nn) >= 0 ? nn : roadPick(L); } } else roadSeat(c, true); });
   }
   // how far ahead the nearest car is: on this lane, on the lane it goes to next, or any car close in front heading its way.
   // Two cars that each have the other in front (side by side at a merge or in a junction) do not both wait: the one on the
   // lower priority lane does, or on equal lanes the later car, so one always goes and they cannot lock each other
   function roadGap(c, me) {
     var best = 1e9, rem = c.lane.len - c.s;
-    for (var i = 0; i < ROADS.cars.length; i++) {
-      var d = ROADS.cars[i]; if (d === c || d.parked) continue;
+    for (var i = 0; i < ROADNET.cars.length; i++) {
+      var d = ROADNET.cars[i]; if (d === c || d.parked) continue;
       if (d.lane === c.lane && d.s > c.s) best = Math.min(best, d.s - c.s);
       else if (d.lane === c.next) best = Math.min(best, rem + d.s);
       else { var dx = d.g.position.x - me.x, dz = d.g.position.z - me.z, dist = Math.hypot(dx, dz); if (dist < 7) { var hx = Math.cos(c.yaw), hz = -Math.sin(c.yaw), fwd = dx * hx + dz * hz, side = Math.abs(dx * hz - dz * hx); if (fwd > 0 && side < 1.7 && Math.cos(d.yaw - c.yaw) > -0.3) { var gx = Math.cos(d.yaw), gz = -Math.sin(d.yaw), mutual = (-dx * gx - dz * gz) > 0 && Math.abs(-dx * gz + dz * gx) < 1.7; if (!mutual || d.lane.prio > c.lane.prio || (d.lane.prio === c.lane.prio && d.id < c.id)) best = Math.min(best, fwd); } } }
@@ -1621,7 +1621,7 @@
   // is any car within limit metres of the end of lane L, counting back through the lanes that feed it (acc is the way already counted)
   function roadComing(L, acc, limit, skip, seen) {
     seen = seen || []; if (seen.indexOf(L) >= 0) return false; seen.push(L);
-    for (var i = 0; i < ROADS.cars.length; i++) { var d = ROADS.cars[i]; if (d !== skip && !d.parked && d.lane === L && L.len - d.s + acc < limit) return true; }
+    for (var i = 0; i < ROADNET.cars.length; i++) { var d = ROADNET.cars[i]; if (d !== skip && !d.parked && d.lane === L && L.len - d.s + acc < limit) return true; }
     for (var k = 0; k < L.prev.length; k++) if (acc + L.len < limit && roadComing(L.prev[k], acc + L.len, limit, skip, seen)) return true;
     return false;
   }
@@ -1635,26 +1635,26 @@
     var B = c.next; c.capHold = false; c.boxHold = false; if (!B) return true;
     if (c.lane.src.opt.merge) return true;   // a car already merging has given way at the line: it carries on
     // into a junction only with room on the far side, so nobody stops in the box and locks the other approaches out
-    if (B.box) { if (!c.after || B.next.indexOf(c.after) < 0) c.after = roadPick(B); if (c.after) for (var ai = 0; ai < ROADS.cars.length; ai++) { var da = ROADS.cars[ai]; if (da !== c && !da.parked && da.lane === c.after && da.s < 8) { c.boxHold = true; return false; } } }
+    if (B.box) { if (!c.after || B.next.indexOf(c.after) < 0) c.after = roadPick(B); if (c.after) for (var ai = 0; ai < ROADNET.cars.length; ai++) { var da = ROADNET.cars[ai]; if (da !== c && !da.parked && da.lane === c.after && da.s < 8) { c.boxHold = true; return false; } } }
     var loopL = B.comp ? B : (B.src.opt.merge && B.next.length ? B.next[0] : null);
-    if (loopL && loopL.comp && c.lane.comp !== loopL.comp) { B = loopL; var inLoop = 0; for (var ci = 0; ci < ROADS.cars.length; ci++) { var dc = ROADS.cars[ci]; if (dc !== c && !dc.parked && dc.lane && dc.lane.comp === B.comp) inLoop++; } if (inLoop >= B.comp.cap) { c.capHold = true; return false; } B = c.next; }
-    for (var i = 0; i < ROADS.cars.length; i++) {
-      var d = ROADS.cars[i]; if (d === c || d.parked || !d.lane) continue;
+    if (loopL && loopL.comp && c.lane.comp !== loopL.comp) { B = loopL; var inLoop = 0; for (var ci = 0; ci < ROADNET.cars.length; ci++) { var dc = ROADNET.cars[ci]; if (dc !== c && !dc.parked && dc.lane && dc.lane.comp === B.comp) inLoop++; } if (inLoop >= B.comp.cap) { c.capHold = true; return false; } B = c.next; }
+    for (var i = 0; i < ROADNET.cars.length; i++) {
+      var d = ROADNET.cars[i]; if (d === c || d.parked || !d.lane) continue;
       if (B.box && ((d.lane.box === B.box && d.lane.from !== B.from) || (d.res === B.box && d.resFrom !== B.from))) { c.boxHold = true; return false; }
       if (d.lane === B && d.s < 6) return false;
     }
     // a merge lane (a roundabout entry) joins the lane after it: give way to anyone coming round on that lane's feeders
     if (B.src.opt.merge && B.next.length) { var T = B.next[0]; for (var ti = 0; ti < T.prev.length; ti++) if (T.prev[ti] !== B && roadComing(T.prev[ti], 0, 22, c)) return false; }
-    var near = function (F, extra) { for (var j = 0; j < ROADS.cars.length; j++) { var e = ROADS.cars[j]; if (e !== c && !e.parked && e.lane === F && F.len - e.s + extra < 12) return true; } return false; };
+    var near = function (F, extra) { for (var j = 0; j < ROADNET.cars.length; j++) { var e = ROADNET.cars[j]; if (e !== c && !e.parked && e.lane === F && F.len - e.s + extra < 12) return true; } return false; };
     for (var k = 0; k < B.prev.length; k++) { var F = B.prev[k]; if (F === c.lane || F.prio <= c.lane.prio) continue; if (near(F, 0)) return false; for (var m = 0; m < F.prev.length; m++) if (F.prev[m].prio > c.lane.prio && near(F.prev[m], F.len)) return false; }
     return true;
   }
   function roadTick(dt) {
-    ROADS.checkT -= dt;
-    if (ROADS.checkT <= 0 || !ROADS.sig) { ROADS.checkT = 0.5; var sig = roadSig(); if (sig !== ROADS.sig) { ROADS.sig = sig; ROADS.net = roadNet(); roadReseat(); if (ROADS.dbg) roadDebugDraw(); } }
-    var net = ROADS.net; if (!ROADS.cars.length || !net) return;
+    ROADNET.checkT -= dt;
+    if (ROADNET.checkT <= 0 || !ROADNET.sig) { ROADNET.checkT = 0.5; var sig = roadSig(); if (sig !== ROADNET.sig) { ROADNET.sig = sig; ROADNET.net = roadNet(); roadReseat(); if (ROADNET.dbg) roadDebugDraw(); } }
+    var net = ROADNET.net; if (!ROADNET.cars.length || !net) return;
     var me = new THREE.Vector3(), p = {};
-    ROADS.cars.forEach(function (c) { if (c.parked) { if (Math.random() < dt) roadSeat(c, false); return; }
+    ROADNET.cars.forEach(function (c) { if (c.parked) { if (Math.random() < dt) roadSeat(c, false); return; }
       var L = c.lane, rem = L.len - c.s, target = Math.min(c.vmax, L.vmax);
       if (c.next && rem < 18) target = Math.min(target, c.next.vmax + rem * 0.5);
       me.copy(c.g.position); var gap = roadGap(c, me); if (gap < 40) target = Math.min(target, Math.max(0, (gap - 6) * 0.9));
@@ -1662,7 +1662,7 @@
       if (c.hold) { c.wait += dt; var force = c.wait > 9 && !c.capHold && !c.boxHold; target = force ? 1.5 : 0; if (force) c.hold = false; } else if (rem >= 3) c.wait = 0;
       c.v = clamp(c.v + clamp(target - c.v, -8 * dt, 3 * dt), 0, 30);
     });
-    ROADS.cars.forEach(function (c) {
+    ROADNET.cars.forEach(function (c) {
       if (c.parked) return;
       c.s += c.v * dt;
       if (c.hold && c.s > c.lane.len - 0.4) { c.s = c.lane.len - 0.4; c.v = 0; }
@@ -1675,34 +1675,34 @@
   }
   // keep n cars on the road network (0 takes them all off); opt.speed is the top speed in m/s, opt.colours a list to pick from
   function roadTraffic(opt) {
-    opt = typeof opt === 'number' ? { cars: opt } : (opt || {}); ROADS.want = Math.max(0, opt.cars | 0);
-    while (ROADS.cars.length > ROADS.want) { var c0 = ROADS.cars.pop(); scene.remove(c0.g); var k = traffic.cars.indexOf(c0); if (k >= 0) traffic.cars.splice(k, 1); }
-    if (!ROADS.sig) { ROADS.sig = roadSig(); ROADS.net = roadNet(); }
-    while (ROADS.cars.length < ROADS.want) {
+    opt = typeof opt === 'number' ? { cars: opt } : (opt || {}); ROADNET.want = Math.max(0, opt.cars | 0);
+    while (ROADNET.cars.length > ROADNET.want) { var c0 = ROADNET.cars.pop(); scene.remove(c0.g); var k = traffic.cars.indexOf(c0); if (k >= 0) traffic.cars.splice(k, 1); }
+    if (!ROADNET.sig) { ROADNET.sig = roadSig(); ROADNET.net = roadNet(); }
+    while (ROADNET.cars.length < ROADNET.want) {
       var g = carMesh(opt.colours ? pick(opt.colours) : undefined); g.userData.dynamic = true; scene.add(g);
-      var c = { id: ++ROADS.seq, g: g, road: true, dir: 1, z: 0, v: 0, vmax: (opt.speed || 9) * randf(0.85, 1.1), s: 0, lane: null, next: null, wait: 0, yaw: 0 };
-      ROADS.cars.push(c); traffic.cars.push(c); roadSeat(c, true);
+      var c = { id: ++ROADNET.seq, g: g, road: true, dir: 1, z: 0, v: 0, vmax: (opt.speed || 9) * randf(0.85, 1.1), s: 0, lane: null, next: null, wait: 0, yaw: 0 };
+      ROADNET.cars.push(c); traffic.cars.push(c); roadSeat(c, true);
     }
-    return ROADS.cars.length;
+    return ROADNET.cars.length;
   }
   function roadDebugDraw() {
-    if (ROADS.dbg) { scene.remove(ROADS.dbg); ROADS.dbg.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); }
+    if (ROADNET.dbg) { scene.remove(ROADNET.dbg); ROADNET.dbg.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); }
     var g = new THREE.Group(); g.userData.dynamic = true; g.userData.noBake = true;
     var mats = [new THREE.LineBasicMaterial({ color: 0x2fd0ff }), new THREE.LineBasicMaterial({ color: 0xffb020 }), new THREE.LineBasicMaterial({ color: 0xff3a6a })];
-    (ROADS.net ? ROADS.net.lanes : []).forEach(function (L) {
+    (ROADNET.net ? ROADNET.net.lanes : []).forEach(function (L) {
       var m = L.next.length ? (L.prio ? mats[1] : mats[0]) : mats[2], pts = L.pts.map(function (q) { return new THREE.Vector3(q[0], q[1] + 0.15, q[2]); });
       g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m));
       var p = lanePoint(L, L.len * 0.5, {}), a = p.yaw, hx = Math.cos(a), hz = -Math.sin(a), tip = new THREE.Vector3(p.x + hx * 0.5, p.y + 0.15, p.z + hz * 0.5);
       g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(p.x - hx * 0.3 - hz * 0.35, p.y + 0.15, p.z - hz * 0.3 + hx * 0.35), tip, new THREE.Vector3(p.x - hx * 0.3 + hz * 0.35, p.y + 0.15, p.z - hz * 0.3 - hx * 0.35)]), m));
     });
-    scene.add(g); ROADS.dbg = g;
+    scene.add(g); ROADNET.dbg = g;
   }
   // the dev command 'lanes': draw the network (blue lanes, amber priority lanes, red ends that lead nowhere) or hide it
   function roadDebug(on) {
-    if (on === undefined) on = !ROADS.dbg;
-    if (!on) { if (ROADS.dbg) { scene.remove(ROADS.dbg); ROADS.dbg = null; } return 'lanes hidden'; }
-    if (!ROADS.net || !ROADS.sig) { ROADS.sig = roadSig(); ROADS.net = roadNet(); }
-    roadDebugDraw(); return ROADS.net.lanes.length + ' lanes, ' + ROADS.net.joins + ' joins, ' + ROADS.cars.length + ' cars';
+    if (on === undefined) on = !ROADNET.dbg;
+    if (!on) { if (ROADNET.dbg) { scene.remove(ROADNET.dbg); ROADNET.dbg = null; } return 'lanes hidden'; }
+    if (!ROADNET.net || !ROADNET.sig) { ROADNET.sig = roadSig(); ROADNET.net = roadNet(); }
+    roadDebugDraw(); return ROADNET.net.lanes.length + ' lanes, ' + ROADNET.net.joins + ' joins, ' + ROADNET.cars.length + ' cars';
   }
   // ── A vehicle you drive ───────────────────────────────────────────
   // The record is the game's ({ x, z, yaw, speed, gear }); driveStep moves it from the keys with an acceleration, a top speed per
@@ -2121,6 +2121,7 @@
   function tickCards(dt) { for (var id in cards) { cards[id] -= dt; if (cards[id] <= 0) hideCard(id); } }
   // ── Binding the page ──────────────────────────────────────────────
   function coSetupShell() {
+    menusPageReady();   // part 46
     var pc = $('dc-panel-close'); if (pc) pc.addEventListener('click', closePanel);
     var pn = $('dc-panel'); if (pn) pn.addEventListener('click', function (e) { var tb = e.target.closest('[data-tab]'); if (tb) { panel.tab = tb.getAttribute('data-tab'); renderPanel(); sfx('click'); return; } var b = e.target.closest('[data-act]'); if (!b || b.disabled) return; panelAct(b.getAttribute('data-act'), b.getAttribute('data-arg')); });
     var mn = $('dc-menu'); if (mn) mn.addEventListener('click', function (e) { var b = e.target.closest('[data-menu]'); if (!b) return; menuAct(b.getAttribute('data-menu'), b); });
@@ -2362,7 +2363,8 @@
   }
   // ── Menus as data ─────────────────────────────────────────────────
   // theme:    { accent, panel, text, muted, font, radius, dim, align: 'center' | 'left', width, layout: 'stack' | 'row', image }
-  // start:    { title, subtitle, logo, chips, note, buttons: [{ label, action, primary }] }      image (in theme) is the start backdrop
+  // start:    { title, subtitle, logo, chips, note, keepPage, buttons: [{ label, action, primary }] }   image (in theme) is the backdrop;
+  //           keepPage (on unless false) keeps what else the page's start card held under the buttons: a disclaimer, support links
   // pause:    { title, line, buttons: [{ label, action, primary }] }
   // settings: { hide: ['fov', ...], custom: [{ key, label, type: 'toggle' | 'slider' | 'select', min, max, step, options, value }] }
   // pages:    { name: { title, text } }                                   text is paragraphs and '- ' lists, as in the UI tab
@@ -2370,7 +2372,7 @@
   // settings, guide, stats, saves, edit, devlink, reset, quit; on both 'page <name>'. Anything else is a dev command or an
   // expression over the kit, as a UI panel button's is. A custom setting lives in SET with the engine's (SET.difficulty), is
   // kept with them, and reaches GAME.setting(key, value) and the 'settings' hook when it changes; setting(key) reads one.
-  var MENUS = { theme: {}, start: null, pause: null, settings: null, pages: {} };
+  var MENUS = { theme: {}, start: null, pause: null, settings: null, pages: {} }, menusPageExtra = null;
   var MENU_THEME = { accent: '#f5b53d', panel: '#121a24', text: '#eef1f5', muted: '#a0acb8', font: 'Bahnschrift, "Segoe UI", Arial, sans-serif', radius: 12, dim: 0.72, align: 'center', width: 440, layout: 'stack', image: '' };
   var MENU_SETTINGS = [['sens', 'Mouse sensitivity'], ['invertY', 'Invert Y'], ['fov', 'Field of view'], ['bob', 'Head bob while walking'], ['quality', 'Quality'], ['sound', 'Sound'], ['vol', 'Volume'], ['film', 'Film look (vignette, grain)'], ['fps', 'Show FPS (F3)']];
   var MENU_ACTIONS = { start: ['play', 'new', 'settings', 'guide', 'slots', 'quit'], pause: ['resume', 'settings', 'guide', 'stats', 'saves', 'edit', 'devlink', 'reset', 'quit'] };
@@ -2404,6 +2406,7 @@
       '.co-mm .co-mm-btns button:hover, .co-mm .co-mm-body button:hover { border-color: ' + menusRgba(t.accent, 0.7) + '; }' +
       '.co-mm button.primary { background: ' + menusRgba(t.accent, 0.16) + '; border-color: ' + menusRgba(t.accent, 0.5) + '; color: var(--amber); }' +
       '.co-mm .co-mm-body { margin-top: 14px; text-align: left; } .co-mm .co-mm-body .dc-form label { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }' +
+      '.co-mm .co-mm-extra { margin-top: 16px; text-align: left; }' +
       '.co-mm .co-mm-slot { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; } .co-mm .co-mm-slot small { color: var(--muted); }';
   }
   function menusButtons(list, attr) { return (list || []).map(function (b, i) { return '<button ' + attr + '="' + i + '"' + (b.primary ? ' class="primary"' : '') + '>' + esc(b.label || 'Button') + '</button>'; }).join(''); }
@@ -2413,11 +2416,13 @@
     var st = $('dc-start');
     if (MENUS.start) {
       if (!st) { st = document.createElement('div'); st.id = 'dc-start'; st.className = 'dc-overlay'; document.body.appendChild(st); }
+      if (menusPageExtra === null) menusPageExtra = menusExtraOf(st);   // once, from the page's own card, before it is drawn over
       var s = MENUS.start, keepStats = $('dc-start-stats'), keepNote = $('dc-start-note'), stats = keepStats ? keepStats.innerHTML : '', note = keepNote ? keepNote.textContent : '';
       st.classList.add('co-mm'); st.classList.remove('dim');
       st.innerHTML = '<div class="co-mm-card">' + (s.logo ? '<img class="co-mm-logo" src="' + esc(s.logo) + '" alt="">' : '') + '<h1 class="co-mm-title">' + esc(s.title || document.title || 'A new game') + '</h1>' + (s.subtitle ? '<p class="co-mm-subtitle">' + esc(s.subtitle) + '</p>' : '') +
         '<p id="dc-start-stats"' + (s.chips === false ? ' hidden' : '') + '>' + stats + '</p><p id="dc-start-note" class="dc-sub"' + (s.note === false ? ' hidden' : '') + '>' + esc(note) + '</p>' +
-        '<div class="co-mm-btns" id="co-mm-start-btns">' + menusButtons(s.buttons, 'data-start') + '</div><div class="co-mm-body" id="co-mm-start-body" hidden></div></div>';
+        '<div class="co-mm-btns" id="co-mm-start-btns">' + menusButtons(s.buttons, 'data-start') + '</div><div class="co-mm-body" id="co-mm-start-body" hidden></div>' + (s.keepPage !== false && menusPageExtra ? '<div class="co-mm-extra">' + menusPageExtra + '</div>' : '') + '</div>';
+      if (st.hasAttribute('data-co-menus')) st.style.visibility = '';
       if (!st.coMenusBound) { st.coMenusBound = true; st.addEventListener('click', menusStartClick); st.addEventListener('input', function (e) { settingInput(e.target); }); }
     } else if (st) st.classList.remove('co-mm');
     var mn = $('dc-menu');
@@ -2430,6 +2435,15 @@
       var body = $('dc-menu-body'); if (body && !body.coMenusBound) { body.coMenusBound = true; body.addEventListener('input', function (e) { settingInput(e.target); }); }
     } else if (mn) mn.classList.remove('co-mm');
   }
+  // what the page's start card holds besides its title, subtitle, chips, note and start button: kept under the made start screen
+  function menusExtraOf(st) {
+    var card = st.querySelector('.card') || st.firstElementChild; if (!card || card.classList.contains('co-mm-card')) return '';
+    var out = ''; Array.prototype.forEach.call(card.children, function (el, i) { if (/^H[12]$/.test(el.tagName) || el.id === 'dc-start-stats' || el.id === 'dc-start-note' || el.id === 'dc-start-btn' || el.querySelector('#dc-start-btn') || (i < 3 && el.classList.contains('dc-sub') && !el.id)) return; out += el.outerHTML; }); return out;
+  }
+  // the page's start card was told to wait for the made one (data-co-menus); with no start screen made, it shows itself
+  function menusPageReady() { var st = $('dc-start'); if (st && st.hasAttribute('data-co-menus') && !MENUS.start) st.style.visibility = ''; }
+  // the editor's menu-first: the game waits at its start screen as a player sees it
+  function menusAtMenu() { var st = $('dc-start'); if (st) { st.hidden = false; if (st.hasAttribute('data-co-menus')) st.style.visibility = ''; } return !ui.started; }
   // the start screen's own body: settings, a page, the guide or the slots, with a way back to the buttons
   function menusStartBody(html) { var b = $('co-mm-start-body'), bs = $('co-mm-start-btns'); if (!b) return; if (html === null) { b.hidden = true; if (bs) bs.hidden = false; return; } b.innerHTML = '<div style="margin:0 0 10px"><button data-start-back="1" class="primary">← Back</button></div>' + html; b.hidden = false; if (bs) bs.hidden = true; }
   function menusPageHtml(name) { var pg = MENUS.pages && MENUS.pages[name]; return pg ? (pg.title ? '<h3 style="margin:0 0 8px">' + esc(pg.title) + '</h3>' : '') + '<div class="dc-how">' + uiTextHtml(pg.text) + '</div>' : '<p>No page called ' + esc(name) + '.</p>'; }
@@ -2492,7 +2506,7 @@
     if (((CO.cfg && CO.cfg.slots) || 3) > 1) startBtns.push({ label: 'Save slots', action: 'slots' });
     startBtns.push({ label: 'Quit', action: 'quit' });
     return { theme: { accent: css('--amber', MENU_THEME.accent), panel: css('--panel', MENU_THEME.panel), text: css('--text', MENU_THEME.text), muted: css('--muted', MENU_THEME.muted) },
-      start: { title: h1 ? h1.textContent.trim() : document.title, subtitle: '', buttons: startBtns },
+      start: { title: h1 ? h1.textContent.trim() : document.title, subtitle: (document.querySelector('#dc-start .card > .dc-sub:not([id])') || { textContent: '' }).textContent.trim(), buttons: startBtns },
       pause: { title: h2 ? h2.textContent.trim() : 'Paused', buttons: btns.map(function (b) { var o = { label: b.label, action: b.action }; if (b.primary) o.primary = true; return o; }) },
       settings: { hide: [], custom: [] }, pages: {} };
   }
@@ -2566,7 +2580,7 @@
     if (look.shirt) hopt.shirt = std({ map: TEX.cloth, color: npcHex(look.shirt, NPC_COLS.shirt), roughness: 0.92 }); if (look.pants) hopt.pants = std({ map: TEX.cloth, color: npcHex(look.pants, NPC_COLS.pants), roughness: 0.95 });
     var g = makeHuman(hopt); g.userData.dynamic = true; g.userData.npc = true; scene.add(g);
     var n = { id: 'npc' + npcSeq, ch: ch, charId: charId, name: name, g: g, x: at.x, z: at.z, yaw: at.ry || 0, path: null, speed: ch.speed || 1.4, step: 0, t: 0, state: 'start', talkOpen: false, home: { x: at.x, z: at.z }, data: {}, spawner: opt.spawner || null, worker: opt.worker || null, post: opt.post || null, car: null, carDoor: null, gone: false };
-    n.pub = { id: n.id, name: name, character: charId, data: n.data, get x() { return n.x; }, get z() { return n.z; }, get step() { return n.step; }, say: function (t) { return npcSay(n, t); }, leave: function () { npcLeave(n); }, go: function (i) { npcGoto(n, i); }, next: function () { npcNext(n); } };
+    n.pub = { id: n.id, name: name, character: charId, data: n.data, get x() { return n.x; }, get z() { return n.z; }, get step() { return n.step; }, say: function (t) { return npcSay(n, t); }, leave: function () { npcSendOff(n); }, go: function (i) { npcGoto(n, i); }, next: function () { npcNext(n); } };
     n.hit = hitBox(0.8, 1.9, 0.8, 0, 0.95, 0, { prompt: function () { var st = npcStepNow(n); return st && st.do === 'talk' && n.state === 'talk' ? String(st.prompt || 'Talk to {name}').replace(/\{name\}/g, n.name) : ''; }, use: function () { npcTalk(n); } }, g);
     npcList.push(n); npcPlace(n); runHooks('npcSpawn', n.pub); return n;
   }
@@ -2580,7 +2594,7 @@
   function npcStepNow(n) { var steps = n.ch.steps || []; return steps[n.step] || null; }
   function npcNext(n) { n.step++; n.state = 'start'; n.t = 0; n.path = null; }
   function npcGoto(n, i) { n.step = Math.max(0, i | 0); n.state = 'start'; n.t = 0; n.path = null; }
-  function npcLeave(n) { n.leaving = true; n.state = 'start'; n.path = null; n.t = 0; }
+  function npcSendOff(n) { n.leaving = true; n.state = 'start'; n.path = null; n.t = 0; }
   // the route finder where its grid covers both ends; outside it a straight walk; either way the walk ends on the point itself
   function npcOnGrid(q) { if (NAV.dirty || !NAV.grid) navBuild(); return !!NAV.grid && q.x >= NAV.x0 && q.z >= NAV.z0 && q.x < NAV.x0 + NAV.w * NAV.cell && q.z < NAV.z0 + NAV.h * NAV.cell; }
   function npcWalkTo(n, p) { var path = npcOnGrid(n) && npcOnGrid(p) ? route({ x: n.x, z: n.z }, { x: p.x, z: p.z }) : null; if (!path || !path.length) path = [{ x: p.x, z: p.z }]; else { var last = path[path.length - 1]; if (Math.hypot(last.x - p.x, last.z - p.z) > 0.5) path.push({ x: p.x, z: p.z }); } n.path = path; n.faceTo = p.ry; }
@@ -2598,7 +2612,7 @@
     if (c.say) npcSay(n, c.say); if (c.run) npcRun(n, c.run);
     runHooks('npc', 'choice', n.pub, c.label); if (CO.game && CO.game.npcEvent) CO.game.npcEvent('choice', n.pub, c.label);
     var then = String(c.then || 'next').trim();
-    if (then === 'stay') n.state = 'talk'; else if (then === 'leave') npcLeave(n); else if (then === 'repeat') npcGoto(n, 0); else if (/^step\s+\d+$/.test(then)) npcGoto(n, +then.slice(5) - 1); else npcNext(n);
+    if (then === 'stay') n.state = 'talk'; else if (then === 'leave') npcSendOff(n); else if (then === 'repeat') npcGoto(n, 0); else if (/^step\s+\d+$/.test(then)) npcGoto(n, +then.slice(5) - 1); else npcNext(n);
     return true;
   }
   // one NPC, one frame: its car, its walk, the step it is on
@@ -2610,8 +2624,8 @@
     if (moving) return;
     if (n.leaving) { npcLeaveTick(n, dt); return; }
     var st = npcStepNow(n);
-    if (!st) { if (n.worker) { npcGoto(n, 0); return; } npcLeave(n); return; }
-    if (n.worker && !npcInHours(n.worker.hours) && st.do !== 'talk') { npcLeave(n); return; }
+    if (!st) { if (n.worker) { npcGoto(n, 0); return; } npcSendOff(n); return; }
+    if (n.worker && !npcInHours(n.worker.hours) && st.do !== 'talk') { npcSendOff(n); return; }
     var first = n.state === 'start'; if (first) { n.state = 'run'; n.t = 0; } n.t += dt;
     switch (st.do) {
       case 'walk': if (first) { var p = npcPoint(n, st.to); if (p) npcWalkTo(n, p); else npcNext(n); } else npcNext(n); break;
@@ -2624,7 +2638,7 @@
       case 'until': if (!n.untilT || n.untilT <= 0) { n.untilT = +st.every || 0.5; if (npcTest(n, st.test || 'true')) npcNext(n); } else n.untilT -= dt; break;
       case 'run': npcRun(n, st.code); npcNext(n); break;
       case 'event': runHooks('npc', st.name || 'event', n.pub); if (CO.game && CO.game.npcEvent) CO.game.npcEvent(st.name || 'event', n.pub); npcNext(n); break;
-      case 'leave': npcLeave(n); break;
+      case 'leave': npcSendOff(n); break;
       case 'repeat': npcGoto(n, 0); break;
       case 'goto': npcGoto(n, (+st.step || 1) - 1); break;
       default: npcNext(n);
@@ -2914,7 +2928,7 @@
     ids.forEach(function (k, i) {
       if (propInst[k]) { var src = customById(k) || placedById(k), type = src ? src.type : (PROPS[k] ? k : null), P = propPlacement(k); if (!type) return; var c = { id: uid('cp'), type: type, x: snap(spots[i].x + dx), z: snap(spots[i].z + dz), rot: P.rot || 0, h: P.h || 0 }; S.custom.push(c); buildProp(c.id); made.push({ prop: c, id: c.id }); return; }
       var o = eobj(k); if (!o || !o.userData.worldKey) return; if (o.userData.movesOnly) { refused.push(worldName(o)); return; }
-      var rec = { id: uid('wc'), of: o.userData.worldCopy ? o.userData.worldCopy.of : o.userData.worldKey, x: wr(o.position.x + dx), y: wr(o.position.y), z: wr(o.position.z + dz), ry: Math.round(o.rotation.y * 180 / Math.PI * 10) / 10, sx: wr(o.scale.x), sy: wr(o.scale.y), sz: wr(o.scale.z) };
+      var rec = { id: uid('wc'), of: o.userData.worldCopy ? o.userData.worldCopy.of : o.userData.worldKey, x: worldRound(o.position.x + dx), y: worldRound(o.position.y), z: worldRound(o.position.z + dz), ry: Math.round(o.rotation.y * 180 / Math.PI * 10) / 10, sx: worldRound(o.scale.x), sy: worldRound(o.scale.y), sz: worldRound(o.scale.z) };
       WORLD_COPIES.push(rec); var g = worldCopyBuild(rec); if (g) made.push({ world: rec, id: eid(g) }); else { WORLD_COPIES.splice(WORLD_COPIES.indexOf(rec), 1); refused.push(worldName(o)); }
     });
     if (!made.length) return { error: refused.length ? refused.join(', ') + ' cannot be copied (it moves only)' : 'nothing to copy' };
@@ -3039,7 +3053,7 @@
       if (e.button === 0 && pendingOff) { var po = pendingOff; pendingOff = null; if (!moved0) { editorSelect(po, true); console.log('[co-editor] ' + JSON.stringify({ select: editorSel, selection: editorMulti.slice() })); } }
       if (e.button === 0 && groupDrag) { var GD0 = groupDrag; groupDrag = null; if (GD0.moved) editorGroupCommit(GD0); return; }
       if (e.button === 0 && toolStroke) { var TS = toolStroke; toolStroke = null; var afterH = Float32Array.from(TERRAIN.heights), afterP = Uint8Array.from(TERRAIN.paint); histPush('terrain ' + TS.mode, function () { terrainRestore(TS.h, TS.p); }, function () { terrainRestore(afterH, afterP); }); }
-      if (e.button === 0 && propDrag && propDrag.world) { var DW = propDrag; propDrag = null; if (DW.moved) { var gw = DW.g, bw = DW.before, aw = { x: gw.position.x, z: gw.position.z }; worldRecord(gw); histPush('move ' + worldName(gw), function () { gw.position.x = bw.x; gw.position.z = bw.z; gw.updateMatrixWorld(true); worldRecord(gw); shadowDirty = true; }, function () { gw.position.x = aw.x; gw.position.z = aw.z; gw.updateMatrixWorld(true); worldRecord(gw); shadowDirty = true; }); console.log('[co-editor] ' + JSON.stringify({ moved: DW.id, x: wr(aw.x), z: wr(aw.z), world: true })); } return; }
+      if (e.button === 0 && propDrag && propDrag.world) { var DW = propDrag; propDrag = null; if (DW.moved) { var gw = DW.g, bw = DW.before, aw = { x: gw.position.x, z: gw.position.z }; worldRecord(gw); histPush('move ' + worldName(gw), function () { gw.position.x = bw.x; gw.position.z = bw.z; gw.updateMatrixWorld(true); worldRecord(gw); shadowDirty = true; }, function () { gw.position.x = aw.x; gw.position.z = aw.z; gw.updateMatrixWorld(true); worldRecord(gw); shadowDirty = true; }); console.log('[co-editor] ' + JSON.stringify({ moved: DW.id, x: worldRound(aw.x), z: worldRound(aw.z), world: true })); } return; }
       if (e.button === 0 && propDrag) { var D = propDrag; propDrag = null; if (D.moved) { var P = propPlacement(D.id), x = Math.round(D.g.position.x * 100) / 100, z = Math.round(D.g.position.z * 100) / 100; if (!S.layout) S.layout = {}; S.layout[D.id] = S.layout[D.id] || { x: P.x, z: P.z, rot: P.rot, h: P.h || 0 }; S.layout[D.id].x = x; S.layout[D.id].z = z; if (D.rot !== undefined) S.layout[D.id].rot = D.rot; rebuildProp(D.id); save(); var after = layoutSnap(D.id), bef = D.before; histPush('move ' + D.id, function () { layoutRestore(D.id, bef); }, function () { layoutRestore(D.id, after); }); editorSelect(D.id); console.log('[co-editor] ' + JSON.stringify({ moved: D.id, x: x, z: z })); } }
       if (e.button === 0 && partDrag) { console.log('[co-editor] ' + JSON.stringify({ partDragEnd: partDrag.part, type: partDrag.type })); partDrag = null; }
     });
@@ -3224,6 +3238,7 @@
     clipPaths: function (id) { var o = eobj(id); if (!o) return []; var u = o.userData || {}, out = ['position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z', 'scale.x', 'scale.y', 'scale.z', 'visible']; if (u.legs) ['leg.0', 'leg.1', 'knee.0', 'knee.1', 'arm.0', 'arm.1', 'elbow.0', 'elbow.1', 'torso', 'head'].forEach(function (p) { out.push(p + '.rotation.x', p + '.rotation.y', p + '.rotation.z'); out.push(p + '.position.y'); }); o.children.forEach(function (ch, i) { if (ch.userData.editor) return; ['rotation.x', 'rotation.y', 'rotation.z', 'position.x', 'position.y', 'position.z'].forEach(function (f) { out.push('child.' + i + '.' + f); }); if (ch.name) out.push('name.' + ch.name + '.rotation.y'); }); return out; },
     npcs: npcData, npcsCode: npcCode, npcSpawn: npcSpawnNow, npcInfo: npcInfo, npcAim: npcAim, npcClear: npcClear,
     npcsSet: function (data) { var prev = npcData(), next = JSON.parse(JSON.stringify(data || {})); CO.npcs(next); histPush('NPCs', function () { CO.npcs(prev); }, function () { CO.npcs(next); }); return npcData(); },
+    atMenu: menusAtMenu,
     menus: menusData, menusCode: menusCode, menusSeed: menusSeed, menusPreview: menusPreview,
     menusSet: function (data) { var prev = menusData(), next = JSON.parse(JSON.stringify(data || {})); CO.menus(next); histPush('Menus', function () { CO.menus(prev); }, function () { CO.menus(next); }); return menusData(); },
     ui: uiData, uiSet: function (data) { var prev = uiData(), next = JSON.parse(JSON.stringify(data || {})); CO.ui(next); if (ui.panelOpen) renderPanel(); histPush('UI', function () { CO.ui(prev); }, function () { CO.ui(next); }); return uiData(); },
@@ -3639,87 +3654,6 @@
       { id: "cp-mv2rkcdd-2y", type: "ctStreetLamp", x: -29.15, z: 22.75, rot: 3, h: 0 },
       { id: "cp-mv2rkx98-2z", type: "bdTerrace", x: -37.15, z: 17.1, rot: 0, h: 0 },
     ]
-  });
-  CO.menus({
-    "theme": {
-      "accent": "#f5b53d",
-      "panel": "#121a24",
-      "text": "#eef1f5",
-      "muted": "#a0acb8"
-    },
-    "start": {
-      "title": "Garage Co.",
-      "subtitle": "",
-      "buttons": [
-        {
-          "label": "Play",
-          "action": "play",
-          "primary": true
-        },
-        {
-          "label": "Settings",
-          "action": "settings"
-        },
-        {
-          "label": "How to play",
-          "action": "guide"
-        },
-        {
-          "label": "Save slots",
-          "action": "slots"
-        },
-        {
-          "label": "Quit",
-          "action": "quit"
-        }
-      ]
-    },
-    "pause": {
-      "title": "Paused",
-      "buttons": [
-        {
-          "label": "Resume",
-          "action": "resume",
-          "primary": true
-        },
-        {
-          "label": "Settings",
-          "action": "settings"
-        },
-        {
-          "label": "How to play",
-          "action": "guide"
-        },
-        {
-          "label": "Build mode",
-          "action": "edit"
-        },
-        {
-          "label": "The books",
-          "action": "stats"
-        },
-        {
-          "label": "Save file",
-          "action": "saves"
-        },
-        {
-          "label": "Unlink the editor",
-          "action": "devlink"
-        },
-        {
-          "label": "⟲ Reset this save",
-          "action": "reset"
-        },
-        {
-          "label": "Quit to the start",
-          "action": "quit"
-        }
-      ]
-    },
-    "settings": {
-      "hide": [],
-      "custom": []
-    }
   });
   // the pack's state in the save: which gates and barriers are open, which levers are on
   function pkState() { if (!S.pack) S.pack = { gates: {}, switches: {} }; if (!S.pack.gates) S.pack.gates = {}; if (!S.pack.switches) S.pack.switches = {}; return S.pack; }
