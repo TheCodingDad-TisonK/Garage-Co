@@ -54,10 +54,15 @@
   GAME.handle = 'GARAGE'; GAME.versionGlobal = 'GARAGE_VERSION';
   GAME.freshState = function () {
     return { day: 1, time: OPEN_AT, bank: 400, rep: 10, level: 1, xp: 0, stage: 1, doorOpen: false, door2Open: false, jobs: [], done: [], stats: { earned: 0, spent: 0, jobs: 0, fixed: 0, days: 0, late: 0 }, log: [], ledger: [], layout: {}, custom: [], hdoors: {},
-      stock: { oil: 2, oilfilter: 2, pads: 1, bulb: 3, battery: 1 }, orders: [], delivery: null, minStock: {}, tools: { spanner: true, brace: true, filterwrench: true }, tool: null, hand: null, up: {}, staff: [], cands: null, comebacks: [], repLog: [] };
+      stock: { oil: 2, oilfilter: 2, pads: 1, bulb: 3, battery: 1 }, orders: [], delivery: null, minStock: {}, tools: { spanner: true, brace: true, filterwrench: true }, tool: null, hand: null, up: {}, staff: [], cands: null, comebacks: [], repLog: [], layoutRev: 1 };
   };
-  // a save from 0.2: one job (S.job) becomes bay 1's; the stock, the tools and the rest arrive as the fresh state's missing keys
+  // the HUD chips of src/00-ui.js are expressions over the editor's kit: these are the game's own names they read
+  GAME.editorKit = function () { return { jobChip: jobChip, handLine: handLine, jobAt: jobAt, stockTotal: stockTotal, stockCap: stockCap }; };
+  // a save from 0.2: one job (S.job) becomes bay 1's; the stock, the tools and the rest arrive as the fresh state's missing keys.
+  // Its own prop positions (S.layout) date from before the lock-up was moved in the editor and would stand the fittings 2 m out in
+  // front of it, so they are dropped once (layoutRev): every prop goes back to where the shipped layout puts it
   GAME.migrate = function (s, fresh, missing) {
+    if (missing && missing.layoutRev) { s.layout = {}; s.layoutRev = 1; }
     if (s.job !== undefined) { s.jobs = s.job ? [s.job] : []; delete s.job; }
     if (!s.stats.jobs) s.stats.jobs = s.stats.jobs || 0;
     if (s.jobs) s.jobs.forEach(function (J) { if (J && !J.faults) { J.faults = [J.car.fault]; J.step = 0; J.stepP = 0; J.vis = {}; J.parts = 0; if (J.state === 'fixing') J.state = 'taken'; } });

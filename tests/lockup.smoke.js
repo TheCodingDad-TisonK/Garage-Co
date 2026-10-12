@@ -101,5 +101,10 @@ module.exports = `
   ok(/lower it/.test(T.canDrive(0)), 'no driving off a raised lift');
   T.devCommand('fix'); T.run(16); T.takePayment(0); T.run(20); ok(T.job(0) && T.job(0).state === 'leaving', 'paid: the customer drives it off the lift');
   T.run(40); ok(!T.job(0) && T.car(0) === null, 'it reversed out and drove away');
+  // a 0.2 save: its old prop positions are dropped once, so the shipped layout stands the fittings inside the moved lock-up
+  { const old = { stats: { jobs: 2 }, job: null, layout: { desk: { x: -3.65, z: -3.1, rot: 0, h: 0 } } }; const m = T.GAME.migrate(old, T.GAME.freshState(), { layoutRev: true });
+    ok(Object.keys(m.layout).length === 0 && m.layoutRev === 1 && Array.isArray(m.jobs), 'a 0.2 save drops its old prop positions once'); }
+  { const now = { stats: { jobs: 2 }, jobs: [], layoutRev: 1, layout: { desk: { x: 1, z: 1 } } }; ok(T.GAME.migrate(now, T.GAME.freshState(), {}).layout.desk.x === 1, 'a 0.3 save keeps its own moves'); }
+  T.updateHud(1); { const t = document.getElementById('dc-hud').textContent.replace(/[ ]+/g, ' '); ok(t.indexOf('Job?') < 0 && t.indexOf('Hands?') < 0 && t.indexOf('Hands') >= 0, 'the Job and Hands chips read the game: ' + t.slice(0, 200)); }
   ok(/hold/i.test(T.GAME.guideHtml()) && /PC/.test(T.GAME.guideHtml()) && /garage/i.test(T.GAME.menuLine()), 'the guide and the pause line are the garage ones');
 `;

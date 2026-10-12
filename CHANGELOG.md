@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 (2026-10-12): Bug Patch
+
+- A save from 0.2 kept its own copy of where every prop stood, from before the lock-up was moved, so the desk, the sofa, the break room and more stood two metres out in front of the building. That old copy is dropped once when the save loads, and everything goes back where it belongs.
+- The Job and Hands chips at the top of the screen show the job you are nearest and what is in your hands, instead of a question mark.
+
 ## 0.3.0 (2026-10-11): The Workshop Update
 
 - **Drive it onto the lift.** Take the job at the desk, get in the car, and drive it yourself through the roll door onto the yellow lines of the lift (W and S, A and D to steer, E to get out). Hold E at the lift's control box and the car rises to working height. When the customer has paid, they reverse it off the lift and drive away.
