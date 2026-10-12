@@ -6,15 +6,12 @@
   function stockCap() { return 24 + (owns('shed') ? 40 : 0) + (grown() ? 60 : 0); }
   function stockLine() { var a = []; Object.keys(PARTS).forEach(function (p) { if (S.stock[p]) a.push(S.stock[p] + ' ' + PARTS[p].name); }); return a.length ? a.join(', ') : 'empty'; }
   function onOrder(p) { var n = 0; (S.orders || []).forEach(function (o) { if (o.part === p) n += o.n; }); if (S.delivery) n += S.delivery.parts[p] || 0; return n; }
-  var _boxGeo = null, _boxMats = {};
-  function stockMat(p) { return _boxMats[p] || (_boxMats[p] = std({ color: PARTS[p].col, roughness: 0.8 })); }
-  // the boxes: the rack first, then the shed, then the parts store
+  // the parts on the shelves, each in its own look (02-car.js, gcPartMesh): the rack first, then the shed, then the parts store
   function stockDraw() {
     var units = []; Object.keys(PARTS).forEach(function (p) { for (var i = 0; i < (S.stock && S.stock[p] || 0); i++) units.push(p); });
-    _boxGeo = _boxGeo || boxGeo(0.2, 0.16, 0.26);
     var fill = function (grp, shelves, per, x0, dx, n0, dz) {
       if (!grp) return n0; while (grp.children.length) grp.remove(grp.children[0]);
-      var n = n0; for (var s = 0; s < shelves.length; s++) for (var k = 0; k < per; k++) { if (n >= units.length) return n; var m = new THREE.Mesh(_boxGeo, stockMat(units[n])); m.position.set(x0 + k * dx, shelves[s] + 0.1, dz || 0); m.castShadow = true; grp.add(m); n++; }
+      var n = n0; for (var s = 0; s < shelves.length; s++) for (var k = 0; k < per; k++) { if (n >= units.length) return n; var m = gcPartMesh(units[n]); m.position.set(x0 + k * dx, shelves[s] + 0.02, dz || 0); grp.add(m); n++; }
       return n;
     };
     var n = fill(G.rackBoxes, [0.42, 1.02, 1.62], 8, -0.8, 0.228, 0);
@@ -51,7 +48,7 @@
   function dropSpot() { var o = LO(); return { x: o.x - 2.4, z: o.z + LOCKUP.z + 1.6 }; }
   function vanCome() {
     var load = S.orders.filter(dueNow); S.orders = S.orders.filter(function (o) { return !dueNow(o); });
-    var g = carMesh({ col: 0xf3efe4, plate: 'PARTS' }); g.userData.dynamic = true; box(2.6, 0.9, 1.7, std({ color: 0xf3efe4, roughness: 0.6 }), -0.7, 1.75, 0, g); sign(['PARTS VAN'], 1.6, 0.4, -0.7, 1.75, 0.86, 0, { bg: '#1b232c' }, g); scene.add(g);
+    var g = gcCar({ col: 0xf3efe4, plate: 'PARTS', van: true }); g.userData.dynamic = true; scene.add(g);
     var d = dropSpot(); G.van = { g: g, x: -78, z: ROAD_Z + LANE, yaw: 0, speed: 0, load: load, wait: 0, path: [[ENTRY_X, ROAD_Z + LANE, 9], [ENTRY_X, APRON_Z - 4, 3.5], [d.x + 1.2, d.z + 4.5, 3]] };
     g.position.set(G.van.x, 0, G.van.z); logEvent('The parts van is on its way in.', '');
   }
@@ -65,7 +62,7 @@
   function pileBuild() {
     if (G.pile) { var k = inter.indexOf(G.pileHit); if (k >= 0) inter.splice(k, 1); scene.remove(G.pile); G.pile = null; }
     if (!S.delivery) return; var d = dropSpot(), g = new THREE.Group(); g.userData.dynamic = true; g.position.set(d.x, 0, d.z); scene.add(g); G.pile = g;
-    box(1.0, 0.12, 0.8, MAT.wood, 0, 0.06, 0, g); var i = 0; for (var p in S.delivery.parts) for (var k2 = 0; k2 < Math.min(6, S.delivery.parts[p]); k2++, i++) { var m = box(0.2, 0.16, 0.26, stockMat(p), -0.35 + (i % 4) * 0.23, 0.2 + Math.floor(i / 8) * 0.17, -0.25 + (Math.floor(i / 4) % 2) * 0.4, g); }
+    box(1.0, 0.12, 0.8, MAT.wood, 0, 0.06, 0, g); var i = 0; for (var p in S.delivery.parts) for (var k2 = 0; k2 < Math.min(6, S.delivery.parts[p]); k2++, i++) { var m = gcPartMesh(p); m.position.set(-0.35 + (i % 4) * 0.23, 0.12 + Math.floor(i / 8) * 0.25, -0.2 + (Math.floor(i / 4) % 2) * 0.4); g.add(m); }
     G.pileHit = hitBox(1.1, 0.8, 0.9, 0, 0.4, 0, { prompt: function () { return 'Put the delivery on the shelves: ' + pileLine(); }, use: function () { putAway('player'); } }, g);
   }
   function putAway(by) {

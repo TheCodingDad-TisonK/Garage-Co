@@ -3671,6 +3671,8 @@
       { id: "cp-mv2rkcdd-2y", type: "ctStreetLamp", x: -29.15, z: 22.75, rot: 3, h: 0 },
       { id: "cp-mv2rkx98-2z", type: "bdTerrace", x: -37.15, z: 17.1, rot: 0, h: 0 },
       { id: "cp-mv2z6w9w-3", type: "rdStraight20", x: -20.25, z: 26.75, rot: 0, h: 0 },
+      { id: "gc-shed", type: "gcShed", x: -4.6, z: 4.4, rot: 0, h: 0 },
+      { id: "gc-tyre", type: "gcTyre", x: -8.5, z: 5, rot: 0, h: 0 },
     ]
   });
   CO.menus({
@@ -8062,23 +8064,42 @@
     discs: { name: 'brake disc pair', cost: 40, sell: 80, lvl: 6, col: 0x6a6f75 }
   };
   CO.table('PARTS', PARTS, 'the supplier catalogue: what a part costs you, what it sells for on the invoice, the level it opens');
-  // the jobs a car comes in with, opened by level: what the customer says, the job, the parts, the labour price, and what the shop needs
-  // (needs: an upgrade or a tool bought on the PC). The steps of each job are in 02-work.js
+  // the faults a car can have, opened by level: the job, its short name on the job card's buttons, the parts, the labour price, and
+  // what the shop needs (needs: an upgrade or a tool bought on the PC). The steps of each job are in 02-work.js, the checks that find
+  // it there too. What the customer says is a symptom (below), and a symptom can be more than one fault
   var FAULTS = [
-    { id: 'oil', symptom: 'The oil light has been on since Tuesday.', job: 'an oil and filter change', parts: ['oil', 'oilfilter'], price: 45, lvl: 1 },
-    { id: 'brakes', symptom: 'It squeals every time I brake.', job: 'new front brake pads', parts: ['pads'], price: 70, lvl: 1 },
-    { id: 'bulb', symptom: 'The left headlight is out.', job: 'a headlight bulb', parts: ['bulb'], price: 12, lvl: 1 },
-    { id: 'battery', symptom: 'It would not start this morning.', job: 'a new battery', parts: ['battery'], price: 25, lvl: 1 },
-    { id: 'wipers', symptom: 'It smears all over the glass in the rain.', job: 'new wiper blades', parts: ['wipers'], price: 10, lvl: 2 },
-    { id: 'puncture', symptom: 'The front tyre keeps going flat.', job: 'a puncture repair', parts: ['plugkit'], price: 25, lvl: 2, needs: 'tyre' },
-    { id: 'airfilter', symptom: 'It feels sluggish and it drinks fuel.', job: 'a new air filter', parts: ['airfilter'], price: 15, lvl: 3 },
-    { id: 'plugs', symptom: 'It misfires when I pull away.', job: 'new spark plugs', parts: ['plugs'], price: 40, lvl: 3, needs: 'socket' },
-    { id: 'coolant', symptom: 'It runs hot in traffic.', job: 'a coolant top-up', parts: ['coolant'], price: 20, lvl: 4 },
-    { id: 'newtyre', symptom: 'The front tyre is worn down to the cord.', job: 'a new front tyre', parts: ['tyre'], price: 30, lvl: 5, needs: 'tyremachine' },
-    { id: 'exhaust', symptom: 'It rattles underneath and it is loud.', job: 'a new exhaust section', parts: ['exhaust'], price: 60, lvl: 5 },
-    { id: 'discs', symptom: 'It grinds when I brake.', job: 'new front discs and pads', parts: ['discs', 'pads'], price: 90, lvl: 6 }
+    { id: 'oil', short: 'oil change', job: 'an oil and filter change', parts: ['oil', 'oilfilter'], price: 45, lvl: 1 },
+    { id: 'brakes', short: 'brake pads', job: 'new front brake pads', parts: ['pads'], price: 70, lvl: 1 },
+    { id: 'bulb', short: 'bulb', job: 'a headlight bulb', parts: ['bulb'], price: 12, lvl: 1 },
+    { id: 'battery', short: 'battery', job: 'a new battery', parts: ['battery'], price: 25, lvl: 1 },
+    { id: 'terminal', short: 'terminal', job: 'a loose battery terminal', parts: [], price: 15, lvl: 1 },
+    { id: 'wipers', short: 'wipers', job: 'new wiper blades', parts: ['wipers'], price: 10, lvl: 2 },
+    { id: 'puncture', short: 'puncture', job: 'a puncture repair', parts: ['plugkit'], price: 25, lvl: 2, needs: 'tyre' },
+    { id: 'airfilter', short: 'air filter', job: 'a new air filter', parts: ['airfilter'], price: 15, lvl: 3 },
+    { id: 'plugs', short: 'spark plugs', job: 'new spark plugs', parts: ['plugs'], price: 40, lvl: 3, needs: 'socket' },
+    { id: 'coolant', short: 'coolant', job: 'a coolant top-up', parts: ['coolant'], price: 20, lvl: 4 },
+    { id: 'newtyre', short: 'new tyre', job: 'a new front tyre', parts: ['tyre'], price: 30, lvl: 5, needs: 'tyremachine' },
+    { id: 'exhaust', short: 'exhaust', job: 'a new exhaust section', parts: ['exhaust'], price: 60, lvl: 5 },
+    { id: 'discs', short: 'discs and pads', job: 'new front discs and pads', parts: ['discs', 'pads'], price: 90, lvl: 6 }
   ];
-  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: what the customer says, the parts, the labour price (price) and the level it opens');   // the editor's Settings tab tunes it
+  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: the job, the parts, the labour price (price) and the level it opens');   // the editor's Settings tab tunes it
+  // what the customer says at the desk, and the faults it could be. Only the faults open at your level count: a symptom with one of
+  // them is named at the desk, one with more is a job you find the fault on first (02-work.js, the checks)
+  var SYMPTOMS = [
+    { id: 'oillight', says: 'The oil light has been on since Tuesday.', faults: ['oil'] },
+    { id: 'squeal', says: 'It squeals every time I brake.', faults: ['brakes'] },
+    { id: 'brakenoise', says: 'It makes a horrible noise when I brake.', faults: ['brakes', 'discs'] },
+    { id: 'headlight', says: 'The left headlight is out.', faults: ['bulb'] },
+    { id: 'nostart', says: 'It struggles to start in the mornings.', faults: ['battery', 'terminal', 'plugs'] },
+    { id: 'smear', says: 'It smears all over the glass in the rain.', faults: ['wipers'] },
+    { id: 'flat', says: 'The front tyre keeps going flat.', faults: ['puncture'] },
+    { id: 'tyre', says: 'Something is not right with the front tyre.', faults: ['puncture', 'newtyre'] },
+    { id: 'sluggish', says: 'It feels sluggish and it drinks fuel.', faults: ['airfilter', 'plugs'] },
+    { id: 'misfire', says: 'It misfires when I pull away.', faults: ['plugs'] },
+    { id: 'hot', says: 'It runs hot in traffic.', faults: ['coolant'] },
+    { id: 'rattle', says: 'It rattles underneath and it is loud.', faults: ['exhaust'] }
+  ];
+  CO.table('SYMPTOMS', SYMPTOMS, 'what a customer says at the desk (says) and the faults it could be (faults); two or more open faults make it a job to diagnose');
   var MAKES = ['Harlow Estate', 'Pennant 1.4', 'Kestrel Van', 'Dunmore Coupe', 'Alder Hatch', 'Brampton Saloon'];   // made-up makes, in the house look
   var NAMES = ['Mrs Okafor', 'Dan', 'Priya', 'Mr Holt', 'Lena', 'Sam', 'Mr Baptiste', 'Ruth'];
   CO.setup({ canvas: 'co-canvas', save: 'garageco', game: GAME, spawn: { x: 0, z: -1, yaw: Math.PI }, sun: { box: 40, far: 120, mapSize: 2048, target: [0, 0, 8] }, lightBudget: 8 });
@@ -8098,6 +8119,10 @@
   function deskStand(i) { var o = LO(); return { x: DESK_STAND.x + o.x + (i || 0) * 0.9, z: DESK_STAND.z + o.z + (i || 0) * 0.3 }; }
   function faultById(id) { return FAULTS.filter(function (f) { return f.id === id; })[0] || FAULTS[0]; }
   function faultOf(car) { return faultById(car.fault); }
+  // what the car's customer says: its own symptom, or (a car from before 0.4) the first one its fault shows as
+  function symptomById(id) { return SYMPTOMS.filter(function (s) { return s.id === id; })[0] || null; }
+  function symptomsFor(fid) { return SYMPTOMS.filter(function (s) { return s.faults.indexOf(fid) >= 0; }); }
+  function symptomOf(car) { return symptomById(car.sym) || symptomsFor(car.fault)[0] || { id: '', says: 'Something is not right with it.', faults: [car.fault] }; }
   GAME.floorY = function () { return 0; };
   // the plot around the lock-up: the ground you may walk on and where the editor may stand things. The forecourt can be widened and
   // the fence moved out in the editor, so the plot reaches well past both; walls and fences still stop you through their solids
@@ -8247,13 +8272,14 @@
   // the tool wall: the hand tools a job asks for hang on it (02-work.js has the list). E takes one off its hook or hangs the one in
   // your hand back; a hook you have taken from shows its painted outline. Tools the shop has not bought yet are not on it
   defProp('toolWall', { label: 'tool wall', cat: 'garage', wall: true, x: 1.5, z: -3.83, rot: 0, build: function (c) {
-    c.box(2.4, 1.2, 0.04, MAT.wood, 0, 1.5, 0); for (var i = 0; i < 5; i++) { var x = 0.15 + i * 0.22; c.cyl(0.012, 0.3, MAT.steel, x, 1.75 - (i % 3) * 0.12, 0.05, 6); c.box(0.06, 0.05, 0.03, MAT.rubber, x, 1.62 - (i % 3) * 0.12, 0.05); }
+    c.box(2.4, 1.2, 0.04, MAT.wood, 0, 1.5, 0); for (var i = 0; i < 4; i++) { var x = 0.4 + i * 0.22; c.cyl(0.012, 0.3, MAT.steel, x, 1.75 - (i % 3) * 0.12, 0.05, 6); c.box(0.06, 0.05, 0.03, MAT.rubber, x, 1.62 - (i % 3) * 0.12, 0.05); }
     c.sign(['TOOLS', 'put it back where you found it'], 1.4, 0.3, 0, 2.3, 0.03, 0, { bg: '#1b232c' });
     var dg = c.dynGroup(); G.toolHooks = {};
     TOOL_IDS.forEach(function (t, k) {
       var x = -1.0 + k * 0.28, T = TOOLS[t], hook = new THREE.Group(); hook.position.set(x, 1.5, 0.05); dg.add(hook);
-      box(0.2, 0.5, 0.005, std({ color: 0xf5f1e6, roughness: 1 }), 0, 0, -0.012, hook);   // the painted outline
-      var tool = new THREE.Group(); hook.add(tool); box(0.04, T.len, 0.03, T.mat || MAT.chrome, 0, 0, 0, tool); box(T.headW || 0.1, 0.06, 0.04, MAT.steelDark, 0, T.len / 2, 0, tool);
+      box(0.2, 0.5, 0.005, std({ color: 0x2a2e34, roughness: 1 }), 0, 0, -0.012, hook);   // the painted outline
+      cyl(0.006, 0.05, MAT.steelDark, 0, 0.2, 0.01, hook, 6).rotation.x = Math.PI / 2;      // the peg it hangs from
+      var tool = new THREE.Group(); hook.add(tool); tool.add(gcToolMesh(t));
       G.toolHooks[t] = { hook: hook, tool: tool };
       c.hit(0.24, 0.6, 0.12, x, 1.5, 0.06, { prompt: function () { return toolPrompt(t); }, use: function () { toolUse(t); } });
     });
@@ -8264,7 +8290,7 @@
     c.box(0.5, 0.25, 0.3, MAT.red, -0.6, 1.07, -0.1); c.box(0.3, 0.1, 0.2, MAT.black, 0.5, 0.99, 0.1); c.solid(-1.1, 1.1, -0.4, 0.4, 0, 1.0);
     // the job card: a small screen on a stand at the bench's end, drawn from the state
     c.box(0.06, 0.5, 0.06, MAT.steelDark, 0.95, 1.2, -0.3);
-    touchScreen({ w: 360, h: 240, pw: 0.6, ph: 0.4, x: 0.95, y: 1.6, z: -0.29, ry: 0, parent: c.group, title: 'Job card', draw: drawJobCard });
+    G.jobCard = touchScreen({ w: 360, h: 240, pw: 0.6, ph: 0.4, x: 0.95, y: 1.6, z: -0.29, ry: 0, parent: c.group, title: 'Job card', draw: drawJobCard });
   } });
   defProp('desk', { label: 'desk', cat: 'garage', x: DESK.x, z: DESK.z, rot: 0, build: function (c) {
     c.box(1.6, 0.06, 0.8, MAT.wood, 0, 0.78, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, -0.72, 0.38, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, 0.72, 0.38, 0); c.box(0.5, 0.6, 0.6, MAT.steelDark, 0.45, 0.3, 0);
@@ -8281,8 +8307,7 @@
   } });
   GAME.propAllowed = function (id) { return id !== 'officeDesk' || grown(); };
   defProp('jack', { label: 'trolley jack', cat: 'garage', x: 1.4, z: 1.2, rot: 0, build: function (c) {
-    c.box(0.3, 0.12, 0.7, CHROME_RED, 0, 0.1, 0); c.cyl(0.06, 0.1, MAT.steel, 0, 0.21, -0.1, 12); var h = c.cyl(0.015, 1.0, MAT.steelDark, 0, 0.55, 0.55, 6); h.rotation.x = 0.9;
-    [[0.13, -0.28], [-0.13, -0.28], [0.13, 0.3], [-0.13, 0.3]].forEach(function (p) { var w = c.cyl(0.05, 0.04, MAT.rubber, p[0], 0.05, p[1], 10); w.rotation.z = Math.PI / 2; });
+    var j = gcJackMesh(); j.position.z = -0.3; c.group.add(j);   // the same trolley jack that goes under the cars (02-car.js)
     c.solid(-0.2, 0.2, -0.4, 0.6, 0, 0.4);
   } });
   defProp('stands', { label: 'axle stands', cat: 'garage', x: 3.2, z: -2.8, rot: 0, build: function (c) {
@@ -8316,6 +8341,380 @@
   }
   defProp('fenceSection', { extra: true, shop: false, label: 'fence section', cat: 'yard', yard: true, desc: 'A 3 m section of the forecourt fence with barbed wire. The wire leans out to the back: turn it to face the right way.', build: fenceSectionBuild });
   defProp('xPlanter', { extra: true, label: 'planter', cat: 'yard', yard: true, price: 40, desc: 'A tub of green by the door.', build: function (c) { c.box(0.6, 0.45, 0.6, MAT.grey, 0, 0.22, 0); c.sphere(0.3, std({ color: 0x4f7f3a, roughness: 1 }), 0, 0.65, 0); c.solid(-0.3, 0.3, -0.3, 0.3, 0, 0.9); } });
+  // ── Materials ─────────────────────────────────────────────────────
+  // made once and shared by every car; a car's own paint is its own material (the editor and the jobs read g.userData.paint)
+  var GCM = null;
+  function gcMats() {
+    if (GCM) return GCM;
+    GCM = {
+      glass: new THREE.MeshPhysicalMaterial({ color: 0x22313b, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.34, side: THREE.DoubleSide, clearcoat: 1, depthWrite: false }),
+      mirror: std({ color: 0x8fa3b0, roughness: 0.05, metalness: 1 }),
+      trim: std({ color: 0x16181b, roughness: 0.65 }), black: std({ color: 0x1b1c1f, roughness: 0.7 }), tyre: std({ color: 0x1c1d1f, roughness: 0.95 }),
+      rim: std({ color: 0xc4c8ce, roughness: 0.25, metalness: 0.9 }), rimDark: std({ color: 0x2c2f33, roughness: 0.5, metalness: 0.6 }),
+      disc: std({ color: 0x9a9da3, roughness: 0.35, metalness: 0.8 }), discOld: std({ color: 0x6b5244, roughness: 0.85, metalness: 0.35 }),
+      caliper: std({ color: 0xb8322a, roughness: 0.45, metalness: 0.3 }), pad: std({ color: 0x77716a, roughness: 0.9 }), padOld: std({ color: 0x2a2725, roughness: 0.95 }),
+      engine: std({ color: 0x45484e, roughness: 0.5, metalness: 0.55 }), alu: std({ color: 0xaeb2b8, roughness: 0.35, metalness: 0.8 }),
+      seat: std({ color: 0x2d3036, roughness: 0.95 }), cloth: std({ color: 0x3c4048, roughness: 1 }), dash: std({ color: 0x1f2125, roughness: 0.85 }), liner: std({ color: 0xbdb8ae, roughness: 1 }),
+      head: glowMat(0xfff4d0, 0.45), tail: glowMat(0xff2a1a, 0.5), amber: glowMat(0xffa020, 0.35), white: glowMat(0xf6f6f6, 0.3), dial: glowMat(0x9fd8ff, 0.7), screen: glowMat(0x4a8fe0, 0.5),
+      yellow: std({ color: 0xf2c230, roughness: 0.5 }), red: std({ color: 0xc8342a, roughness: 0.5 }), blue: std({ color: 0x2c5f9e, roughness: 0.4, metalness: 0.2 }), filterOld: std({ color: 0x1e2e44, roughness: 0.85 }),
+      bottle: std({ color: 0xf1f4f0, roughness: 0.3, transparent: true, opacity: 0.55 }), pink: std({ color: 0xf06aa8, roughness: 0.2 }),
+      oil: std({ color: 0x2e1f08, roughness: 0.08, metalness: 0.3 }), oilNew: std({ color: 0xc89a2a, roughness: 0.08, metalness: 0.2 }),
+      pleat: std({ color: 0xf2e7c9, roughness: 1 }), pleatDirty: std({ color: 0x4b4239, roughness: 1 }), copper: std({ color: 0xc87a3a, roughness: 0.35, metalness: 0.8 }),
+      ceramic: std({ color: 0xf2f2ee, roughness: 0.4 }), sooty: std({ color: 0x3a3532, roughness: 0.9 }), fuzz: std({ color: 0xd3eadc, roughness: 1 }),
+      exhaust: std({ color: 0x6f6b66, roughness: 0.75, metalness: 0.5 }), exhaustNew: std({ color: 0xb0aca6, roughness: 0.35, metalness: 0.85 }),
+      jack: std({ color: 0xc8342a, roughness: 0.45, metalness: 0.3 }), labelOld: std({ color: 0x6a6f66, roughness: 0.8 }), labelNew: std({ color: 0x2f9e5a, roughness: 0.6 }),
+      cardboard: std({ color: 0xb48a5a, roughness: 0.95 }), orange: std({ color: 0xe0782a, roughness: 0.6 }),
+      steel: std({ color: 0x6f757e, roughness: 0.4, metalness: 0.7 }), chrome: std({ color: 0x9aa1aa, roughness: 0.18, metalness: 0.95 }), bay: std({ color: 0x3a3e44, roughness: 0.8 })
+    };
+    return GCM;
+  }
+  // ── Small builders ────────────────────────────────────────────────
+  function gcGrp(parent, x, y, z) { var g = new THREE.Group(); g.position.set(x || 0, y || 0, z || 0); parent.add(g); return g; }
+  function gcMesh(geo, mat, parent, x, y, z) { var m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; }
+  // a bar from point a to point b in the car's side plane (x, y) at depth z: t thick, wd across
+  function gcBeam(a, b, z, t, wd, mat, parent) { var dx = b[0] - a[0], dy = b[1] - a[1], m = box(Math.hypot(dx, dy), t, wd, mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z, parent); m.rotation.z = Math.atan2(dy, dx); return m; }
+  function gcZcyl(r, len, mat, x, y, z, parent, seg) { var m = cyl(r, len, mat, x, y, z, parent, seg || 14); m.rotation.x = Math.PI / 2; return m; }   // lying across the car
+  function gcXcyl(r, len, mat, x, y, z, parent, seg) { var m = cyl(r, len, mat, x, y, z, parent, seg || 14); m.rotation.z = Math.PI / 2; return m; }   // lying along the car
+  var GC_GEO = {};
+  function gcTyreGeo() {
+    if (GC_GEO.tyre) return GC_GEO.tyre;
+    var pts = [[0.2, -0.1], [0.255, -0.112], [0.3, -0.11], [0.322, -0.096], [0.331, -0.06], [0.333, 0], [0.331, 0.06], [0.322, 0.096], [0.3, 0.11], [0.255, 0.112], [0.2, 0.1]];
+    return (GC_GEO.tyre = new THREE.LatheGeometry(pts.map(function (p) { return new THREE.Vector2(p[0], p[1]); }), 30));
+  }
+  // the side of the body: sills, the two wheel arches, the nose and the tail, up to the waist line
+  function gcSideShape() {
+    var s = new THREE.Shape();
+    s.moveTo(-2.13, 0.36); s.lineTo(-1.83, 0.34); s.absarc(-1.4, 0.33, 0.43, Math.PI, 0, true); s.lineTo(0.97, 0.33); s.absarc(1.4, 0.33, 0.43, Math.PI, 0, true);
+    s.lineTo(2.12, 0.36); s.quadraticCurveTo(2.2, 0.42, 2.19, 0.62); s.quadraticCurveTo(2.18, 0.86, 2.06, 0.95); s.lineTo(1.1, 1.0); s.lineTo(-1.72, 0.99);
+    s.quadraticCurveTo(-2.1, 0.98, -2.16, 0.86); s.quadraticCurveTo(-2.2, 0.5, -2.13, 0.36);
+    return s;
+  }
+  function gcWindowShape() { var s = new THREE.Shape(); s.moveTo(1.06, 1.01); s.lineTo(0.4, 1.39); s.lineTo(-1.04, 1.39); s.lineTo(-1.68, 1.01); s.lineTo(1.06, 1.01); return s; }
+
+  // ── A wheel ───────────────────────────────────────────────────────
+  // one group at the axle, spun with rotation.z: a rounded tyre, an alloy with five spokes, a centre cap and five wheel nuts (userData.nuts)
+  function gcWheelMesh(s) {
+    var M = gcMats(), w = new THREE.Group();
+    gcMesh(gcTyreGeo(), M.tyre, w).rotation.x = Math.PI / 2;
+    gcZcyl(0.2, 0.2, M.rimDark, 0, 0, 0, w, 20); gcZcyl(0.205, 0.018, M.rim, 0, 0, s * 0.092, w, 24);
+    gcZcyl(0.17, 0.02, M.rimDark, 0, 0, s * 0.094, w, 20);
+    for (var k = 0; k < 5; k++) { var a = k * Math.PI * 2 / 5, sp = box(0.15, 0.04, 0.022, M.rim, Math.cos(a) * 0.1, Math.sin(a) * 0.1, s * 0.1, w); sp.rotation.z = a; }
+    gcZcyl(0.05, 0.03, M.rim, 0, 0, s * 0.108, w, 16); gcZcyl(0.03, 0.006, M.trim, 0, 0, s * 0.124, w, 12);
+    w.userData.nuts = [];
+    for (var n = 0; n < 5; n++) { var b = n * Math.PI * 2 / 5 + Math.PI / 5, nut = gcZcyl(0.013, 0.026, M.alu, Math.cos(b) * 0.068, Math.sin(b) * 0.068, s * 0.114, w, 6); nut.userData.base = [nut.position.x, nut.position.y, nut.position.z]; w.userData.nuts.push(nut); }
+    w.userData.side = s; w.userData.wheel = true;
+    return w;
+  }
+
+  // ── The car ───────────────────────────────────────────────────────
+  // opt: col, plate, van (the parts van: a load box behind the cab). The car's frame is the engine's: the front is +x, the near side
+  // (the driver's side, the one you work from) is +z. g.userData.wheels are in the engine's order: near front, far front, near rear, far rear
+  function gcCar(opt) {
+    opt = opt || {}; var M = gcMats(), g = new THREE.Group(), col = opt.col === undefined ? pick(CAR_COLS) : opt.col, P = {};
+    var paint = new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.32, metalness: 0.45, clearcoat: 1, clearcoatRoughness: 0.12 });
+    // the body: two side skins cut from the profile, the floor, the nose and the tail between them
+    var sideGeo = new THREE.ExtrudeGeometry(gcSideShape(), { depth: 0.05, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 14 });
+    gcMesh(sideGeo, paint, g, 0, 0, 0.86); gcMesh(sideGeo, paint, g, 0, 0, -0.91);
+    box(4.1, 0.05, 1.74, M.black, 0, 0.36, 0, g);
+    gcMesh(bevelGeo(0.16, 0.22, 1.88, 0.05), paint, g, 2.13, 0.46, 0); gcMesh(bevelGeo(0.16, 0.22, 1.88, 0.05), paint, g, -2.13, 0.46, 0);
+    box(0.05, 0.3, 1.72, paint, 2.16, 0.73, 0, g); box(0.05, 0.42, 1.72, paint, -2.15, 0.76, 0, g);
+    // the grille and its badge, the lower intake, the number plates
+    box(0.02, 0.14, 0.62, M.chrome, 2.185, 0.7, 0, g); box(0.03, 0.12, 0.58, M.trim, 2.19, 0.7, 0, g); [0.67, 0.7, 0.73].forEach(function (y) { box(0.012, 0.008, 0.54, M.chrome, 2.205, y, 0, g); });
+    gcXcyl(0.04, 0.012, M.chrome, 2.21, 0.72, 0, g, 16); box(0.03, 0.06, 1.1, M.trim, 2.215, 0.4, 0, g);
+    var plate = opt.plate || ('GC ' + randi(10, 99) + ' ' + pick(['AB', 'KH', 'NL', 'XY']) + randi(100, 999));
+    sign([plate], 0.44, 0.11, 2.225, 0.5, 0, Math.PI / 2, { w: 256, h: 64, bg: '#f5f1e6', fg: '#1b232c' }, g); sign([plate], 0.44, 0.11, -2.225, 0.5, 0, -Math.PI / 2, { w: 256, h: 64, bg: '#f3c843', fg: '#1b232c' }, g);
+    // the lights: headlights with a chrome bezel, indicators, tail lights with a reversing lamp
+    g.userData.lamps = [];
+    [1, -1].forEach(function (s) {
+      box(0.08, 0.15, 0.4, M.trim, 2.13, 0.84, s * 0.6, g); box(0.012, 0.16, 0.41, M.chrome, 2.17, 0.84, s * 0.6, g);
+      var lens = box(0.02, 0.025, 0.34, M.head, 2.18, 0.785, s * 0.6, g), lamps = [lens]; g.userData.lamps.push(lens);
+      [-0.08, 0.08].forEach(function (dz) { gcXcyl(0.05, 0.012, M.chrome, 2.176, 0.85, s * 0.6 + dz, g, 18); lamps.push(gcXcyl(0.038, 0.014, M.head, 2.178, 0.85, s * 0.6 + dz, g, 18)); });
+      if (s > 0) P.lensNear = lamps;
+      box(0.03, 0.04, 0.12, M.amber, 2.2, 0.56, s * 0.74, g);
+      box(0.04, 0.15, 0.36, M.tail, -2.17, 0.84, s * 0.6, g); box(0.042, 0.05, 0.1, M.white, -2.17, 0.8, s * 0.48, g);
+      // the door lines, the handles, the sills, a mirror each side
+      var z = s * 0.924; box(0.006, 0.54, 0.004, M.trim, 1.06, 0.71, z, g); box(0.006, 0.6, 0.004, M.trim, -0.32, 0.69, z, g); box(0.006, 0.36, 0.004, M.trim, -1.62, 0.81, z, g);
+      box(0.12, 0.025, 0.02, M.chrome, 0.62, 0.86, s * 0.93, g); box(0.12, 0.025, 0.02, M.chrome, -0.8, 0.86, s * 0.93, g);
+      box(1.92, 0.08, 0.05, M.trim, 0, 0.38, s * 0.93, g);
+      box(0.04, 0.03, 0.12, M.trim, 1.0, 1.04, s * 0.94, g); var mh = gcMesh(bevelGeo(0.12, 0.1, 0.18, 0.025), paint, g, 1.0, 1.07, s * 1.03); box(0.004, 0.075, 0.14, M.mirror, 0.938, 1.07, s * 1.03, g); mh.rotation.y = s * -0.12;
+    });
+    // the wheels, and behind each one its brake: a disc on the hub, a caliper over it; the near front's are the job's
+    g.userData.wheels = [];
+    [[1.4, 0.95], [1.4, -0.95], [-1.4, 0.95], [-1.4, -0.95]].forEach(function (p, i) {
+      var s = p[1] > 0 ? 1 : -1, w = gcWheelMesh(s); w.position.set(p[0], 0.33, p[1]); g.add(w); g.userData.wheels.push(w);
+      box(0.9, 0.46, 0.04, M.black, p[0], 0.57, s * 0.62, g); box(0.86, 0.04, 0.3, M.black, p[0], 0.78, s * 0.76, g);   // the wheel well
+      var disc = gcZcyl(0.235, 0.022, M.disc, p[0], 0.33, s * 0.81, g, 26), hub = gcZcyl(0.075, 0.05, M.steel, p[0], 0.33, s * 0.83, g, 16);
+      for (var n = 0; n < 5; n++) { var a = n * Math.PI * 2 / 5 + Math.PI / 5; gcZcyl(0.008, 0.05, M.alu, p[0] + Math.cos(a) * 0.068, 0.33 + Math.sin(a) * 0.068, s * 0.86, g, 6); }
+      var cal = gcGrp(g, p[0] - 0.16, 0.49, s * 0.8); cal.rotation.z = Math.PI / 4; box(0.16, 0.09, 0.09, M.caliper, 0, 0, 0, cal);
+      var pads = gcGrp(cal, 0, -0.04, 0); box(0.13, 0.05, 0.012, M.pad, 0, 0, 0.022, pads); box(0.13, 0.05, 0.012, M.pad, 0, 0, -0.022, pads);
+      if (i === 0) { P.disc = disc; P.discBase = disc.position.z; P.caliper = cal; P.calBase = [cal.position.x, cal.position.y, cal.position.z]; P.pads = pads; P.hub = hub; }
+    });
+    // the cabin: the waist, the glass, the pillars and the roof
+    [1, -1].forEach(function (s) {
+      box(2.84, 0.03, 0.1, paint, -0.31, 0.995, s * 0.845, g);
+      var wg = gcMesh(new THREE.ShapeGeometry(gcWindowShape()), M.glass, g, 0, 0, s * 0.8); wg.castShadow = false;
+      gcBeam([1.1, 1.0], [0.38, 1.41], s * 0.77, 0.05, 0.07, paint, g); gcBeam([0.38, 1.41], [-1.06, 1.41], s * 0.77, 0.05, 0.07, paint, g); gcBeam([-1.06, 1.41], [-1.72, 1.0], s * 0.75, 0.05, 0.12, paint, g);
+      box(0.07, 0.4, 0.05, M.trim, -0.32, 1.2, s * 0.8, g); box(2.8, 0.014, 0.02, M.trim, -0.31, 1.015, s * 0.81, g);
+    });
+    var ws = gcBeam([1.1, 1.0], [0.38, 1.41], 0, 0.008, 1.52, M.glass, g); ws.castShadow = false; var rw = gcBeam([-1.06, 1.41], [-1.72, 1.0], 0, 0.008, 1.46, M.glass, g); rw.castShadow = false;
+    gcMesh(bevelGeo(1.5, 0.05, 1.58, 0.02), paint, g, -0.34, 1.435, 0); box(1.42, 0.01, 1.48, M.liner, -0.34, 1.403, 0, g);
+    box(0.12, 0.04, 1.74, M.trim, 1.06, 1.0, 0, g);   // the scuttle below the windscreen
+    // the boot lid
+    gcMesh(bevelGeo(0.44, 0.04, 1.76, 0.015), paint, g, -1.93, 0.975, 0);
+    // the wipers, each on its own pivot at the scuttle: they lift off the glass (rotation.x) when they are changed
+    P.wipers = []; [0.62, -0.08].forEach(function (z) { var wp = gcGrp(g, 1.07, 1.03, z); gcBeam([0, 0], [-0.04, 0.01], 0, 0.015, 0.02, M.trim, wp); box(0.02, 0.018, 0.56, M.trim, -0.02, 0.012, -0.28, wp); P.wipers.push(wp); });
+    // the interior: two seats, a bench, a dashboard with its dials and screen, the steering wheel on the left (left-hand drive: the far side, -z), the door cards
+    [1, -1].forEach(function (s) {
+      gcMesh(bevelGeo(0.5, 0.12, 0.5, 0.04), M.seat, g, -0.18, 0.56, s * 0.4);
+      var back = gcGrp(g, -0.44, 0.6, s * 0.4); back.rotation.z = 0.22; gcMesh(bevelGeo(0.1, 0.62, 0.48, 0.04), M.seat, back, 0, 0.31, 0); box(0.08, 0.15, 0.26, M.seat, 0, 0.72, 0, back);
+      box(2.62, 0.5, 0.02, M.cloth, -0.32, 0.73, s * 0.845, g);
+    });
+    gcMesh(bevelGeo(0.5, 0.12, 1.42, 0.04), M.seat, g, -1.2, 0.56, 0); var rb = gcGrp(g, -1.46, 0.6, 0); rb.rotation.z = 0.22; gcMesh(bevelGeo(0.1, 0.56, 1.42, 0.04), M.seat, rb, 0, 0.28, 0);
+    box(2.8, 0.04, 1.68, M.cloth, -0.32, 0.42, 0, g);
+    gcMesh(bevelGeo(0.42, 0.2, 1.66, 0.05), M.dash, g, 0.84, 0.8, 0); box(0.16, 0.06, 0.44, M.dash, 0.64, 0.93, -0.4, g);
+    [-0.31, -0.49].forEach(function (z) { var d = cyl(0.05, 0.006, M.dial, 0.628, 0.88, z, g, 18); d.rotation.z = Math.PI / 2; });
+    box(0.01, 0.1, 0.2, M.screen, 0.625, 0.84, 0.02, g); box(0.2, 0.18, 0.2, M.dash, 0.4, 0.55, 0, g);
+    cyl(0.01, 0.15, M.chrome, 0.38, 0.7, 0, g, 6); sphere(0.025, M.trim, 0.38, 0.78, 0, g); box(0.02, 0.05, 0.2, M.trim, 0.52, 1.34, 0, g);
+    var col2 = gcGrp(g, 0.6, 0.86, -0.4); col2.rotation.z = -0.4; gcXcyl(0.025, 0.24, M.dash, -0.1, 0, 0, col2, 10);
+    var sw = gcGrp(g, 0.44, 0.93, -0.4); sw.rotation.z = -0.4; P.steer = gcGrp(sw, 0, 0, 0);
+    var ring = gcMesh(new THREE.TorusGeometry(0.155, 0.017, 8, 28), M.trim, P.steer); ring.rotation.y = Math.PI / 2;
+    box(0.02, 0.025, 0.32, M.trim, 0, 0, 0, P.steer); box(0.02, 0.15, 0.03, M.trim, 0, -0.08, 0, P.steer); box(0.04, 0.07, 0.09, M.dash, 0, 0, 0, P.steer);
+    // the engine bay: a floor, the inner wings, the radiator at the front and the bulkhead at the back
+    box(0.95, 0.04, 1.62, M.bay, 1.58, 0.6, 0, g); box(0.95, 0.38, 0.04, paint, 1.58, 0.8, 0.82, g); box(0.95, 0.38, 0.04, paint, 1.58, 0.8, -0.82, g);
+    box(0.06, 0.3, 1.32, M.black, 2.05, 0.8, 0, g); box(0.1, 0.03, 1.62, paint, 2.08, 0.96, 0, g); box(0.03, 0.38, 1.62, paint, 1.12, 0.8, 0, g);
+    for (var f = 0; f < 9; f++) box(0.005, 0.26, 0.004, M.alu, 2.015, 0.8, -0.56 + f * 0.14, g);
+    // the engine: the block, the head under its cover with ribs, four coil packs over the spark plugs, the oil filler cap, the dipstick
+    box(0.55, 0.22, 0.62, M.engine, 1.55, 0.74, 0, g); gcMesh(bevelGeo(0.48, 0.07, 0.52, 0.02), M.alu, g, 1.56, 0.885, 0);
+    [-0.15, -0.05, 0.05, 0.15].forEach(function (x) { box(0.03, 0.012, 0.46, M.engine, 1.56 + x, 0.926, 0, g); });
+    P.coils = []; P.plugs = [];
+    [-0.18, -0.06, 0.06, 0.18].forEach(function (z) {
+      var pl = gcGrp(g, 1.6, 0.9, z); cyl(0.011, 0.07, M.ceramic, 0, 0.0, 0, pl, 8); cyl(0.016, 0.02, M.copper, 0, -0.04, 0, pl, 6); pl.userData.base = pl.position.y; P.plugs.push(pl);
+      var co = gcGrp(g, 1.6, 0.97, z); box(0.05, 0.08, 0.05, M.black, 0, 0, 0, co); box(0.03, 0.015, 0.06, M.red, 0, 0.045, 0.01, co); co.userData.base = co.position.y; P.coils.push(co);
+    });
+    P.cap = gcGrp(g, 1.42, 0.935, 0.28); cyl(0.035, 0.03, M.yellow, 0, 0, 0, P.cap, 16); P.capBase = [1.42, 0.935, 0.28];
+    var ds = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.005, 6, 12), M.yellow); ds.position.set(1.3, 0.95, 0.14); g.add(ds); cyl(0.004, 0.2, M.steel, 1.3, 0.85, 0.14, g, 4);
+    gcXcyl(0.035, 0.3, M.black, 1.36, 0.88, 0.42, g, 10);   // the intake hose to the air box
+    // the air box: a base, a lid that lifts off, and the pleated filter inside
+    box(0.3, 0.08, 0.24, M.black, 1.55, 0.84, 0.55, g);
+    P.airLid = gcGrp(g, 1.55, 0.9, 0.55); P.airLidBase = 0.9; gcMesh(bevelGeo(0.32, 0.045, 0.26, 0.012), M.black, P.airLid); box(0.02, 0.03, 0.03, M.alu, 0.17, -0.01, 0, P.airLid); box(0.02, 0.03, 0.03, M.alu, -0.17, -0.01, 0, P.airLid);
+    P.airFilter = gcGrp(g, 1.55, 0.88, 0.55); P.airFilterBase = 0.88; P.airPleats = [];
+    for (var q = 0; q < 7; q++) P.airPleats.push(box(0.03, 0.03, 0.2, M.pleat, -0.105 + q * 0.035, 0, 0, P.airFilter)); box(0.27, 0.012, 0.22, M.orange, 0, -0.018, 0, P.airFilter);
+    // the battery on its tray: a label, the two terminals, the clamp across the top, the white fur of a corroded terminal
+    box(0.3, 0.03, 0.22, M.black, 1.72, 0.775, -0.52, g);
+    P.battery = gcGrp(g, 1.72, 0.88, -0.52); P.batteryBase = 0.88; box(0.26, 0.18, 0.18, M.black, 0, 0, 0, P.battery); P.batLabel = box(0.2, 0.06, 0.004, M.labelOld, 0, 0.01, 0.092, P.battery);
+    cyl(0.018, 0.03, M.red, 0.08, 0.1, 0.05, P.battery, 10); P.termNut = cyl(0.018, 0.03, M.trim, -0.08, 0.1, 0.05, P.battery, 6);
+    P.fuzz = gcGrp(P.battery, -0.08, 0.115, 0.05); [[0, 0, 0], [0.02, -0.005, 0.012], [-0.015, -0.004, -0.01]].forEach(function (f) { sphere(0.016, M.fuzz, f[0], f[1], f[2], P.fuzz); });
+    P.clamp = gcGrp(g, 1.72, 0.98, -0.52); P.clampBase = 0.98; box(0.03, 0.015, 0.2, M.steel, 0, 0, 0, P.clamp); cyl(0.006, 0.12, M.steel, 0, -0.06, 0.1, P.clamp, 6); cyl(0.006, 0.12, M.steel, 0, -0.06, -0.1, P.clamp, 6);
+    // the coolant tank with its fluid (low when it runs hot) and cap, the washer bottle, the brake fluid, the strut tops
+    cyl(0.062, 0.15, M.bottle, 1.28, 0.9, -0.6, g, 16); P.coolFluid = cyl(0.055, 0.14, M.pink, 1.28, 0.83, -0.6, g, 14); P.coolFluid.position.y = 0.83;
+    P.coolCap = gcGrp(g, 1.28, 0.985, -0.6); P.coolCapBase = [1.28, 0.985, -0.6]; cyl(0.032, 0.025, M.black, 0, 0, 0, P.coolCap, 12);
+    cyl(0.05, 0.13, M.bottle, 1.92, 0.86, -0.25, g, 12); cyl(0.02, 0.02, M.blue, 1.92, 0.935, -0.25, g, 10);
+    box(0.08, 0.08, 0.06, M.bottle, 1.22, 0.92, 0.6, g); cyl(0.02, 0.02, M.yellow, 1.22, 0.97, 0.6, g, 10);
+    [1, -1].forEach(function (s) { cyl(0.06, 0.03, M.black, 1.4, 0.975, s * 0.72, g, 14); });
+    // the backs of the headlights: the near one's round cover twists off and the bulb comes out
+    [1, -1].forEach(function (s) { box(0.1, 0.14, 0.34, M.black, 2.0, 0.84, s * 0.6, g); });
+    P.lampCap = gcGrp(g, 1.94, 0.84, 0.62); P.lampCapBase = 1.94; gcXcyl(0.04, 0.02, M.trim, 0, 0, 0, P.lampCap, 12); box(0.012, 0.05, 0.012, M.trim, -0.012, 0, 0, P.lampCap);
+    P.bulb = gcGrp(g, 1.955, 0.84, 0.62); P.bulbBase = 1.955; sphere(0.016, M.white, -0.01, 0, 0, P.bulb); gcXcyl(0.012, 0.025, M.alu, 0.01, 0, 0, P.bulb, 8);
+    // the bonnet: hinged at the bulkhead, the front a touch lower; the stay holds it up
+    P.lid = gcGrp(g, 1.1, 1.0, 0); var lp = gcMesh(bevelGeo(1.04, 0.03, 1.74, 0.012), paint, P.lid, 0.52, 0.01, 0); lp.rotation.z = -0.025; box(0.92, 0.01, 1.5, M.bay, 0.5, -0.012, 0, P.lid); [-0.45, 0, 0.45].forEach(function (z) { box(0.85, 0.02, 0.05, M.engine, 0.5, -0.025, z, P.lid); }); box(0.05, 0.02, 1.4, M.engine, 0.85, -0.025, 0, P.lid);
+    P.stay = gcBeam([2.0, 0.96], [1.49, 1.64], 0.68, 0.01, 0.01, M.black, g); P.stay.visible = false;
+    // underneath: the sump with its drain plug, the oil filter, the exhaust and its silencer (the section an exhaust job changes)
+    box(0.7, 0.09, 0.8, M.engine, 1.25, 0.31, 0.24, g);
+    P.sumpPlug = cyl(0.018, 0.03, M.alu, 0.98, 0.255, 0.66, g, 6); P.sumpPlugBase = 0.255;
+    P.filter = cyl(0.046, 0.11, M.filterOld, 0.7, 0.28, 0.66, g, 16); box(0.12, 0.04, 0.2, M.engine, 0.72, 0.34, 0.6, g); P.filterBase = 0.28;
+    gcXcyl(0.028, 2.5, M.exhaust, -0.35, 0.24, 0.42, g, 10); gcXcyl(0.03, 0.3, M.chrome, -2.06, 0.27, 0.55, g, 12);
+    P.silencer = gcGrp(g, -1.4, 0.26, 0.58); P.silencerBase = 0.26; var sil = gcXcyl(0.12, 0.62, M.exhaust, 0, 0, 0, P.silencer, 16); sil.scale.z = 0.62; gcXcyl(0.03, 0.9, M.exhaust, 0, -0.02, -0.08, P.silencer, 10);
+    // the drain pan on the floor (y is set against the car's height) with the oil it catches, the stream into it, and the plug lying in it
+    P.pan = gcGrp(g, 0.98, 0, 0.8); P.pan.visible = false; cyl(0.25, 0.08, M.black, 0, 0.04, 0, P.pan, 22); P.panOil = cyl(0.23, 0.01, M.oil, 0, 0.02, 0, P.pan, 22); P.panPlug = cyl(0.018, 0.03, M.alu, 0.1, 0.06, -0.08, P.pan, 6);
+    P.stream = cyl(0.009, 1, M.oil, 0.98, 0.1, 0.68, g, 6); P.stream.visible = false; P.stream.castShadow = false;
+    // the wheel nuts once they are off: in a little pile by the wheel
+    P.nutPile = gcGrp(g, 1.0, 0, 1.35); P.nutPile.visible = false; [[0, 0], [0.04, 0.01], [-0.03, 0.03], [0.02, -0.04], [-0.04, -0.02]].forEach(function (n) { cyl(0.013, 0.026, M.alu, n[0], 0.013, n[1], P.nutPile, 6); });
+    // the jug and the coolant bottle that pour while a fill step fills
+    P.can = gcGrp(g, 1.36, 1.2, 0.36); P.can.visible = false; gcMesh(bevelGeo(0.16, 0.22, 0.1, 0.02), M.yellow, P.can, 0, 0, 0); cyl(0.02, 0.06, M.black, 0.09, -0.1, 0, P.can, 8).rotation.z = 1.0; P.can.rotation.z = 0.9;
+    P.canStream = cyl(0.008, 0.18, M.oilNew, 1.42, 1.03, 0.28, g, 6); P.canStream.visible = false; P.canStream.castShadow = false;
+    P.cbottle = gcGrp(g, 1.22, 1.16, -0.52); P.cbottle.visible = false; cyl(0.05, 0.2, M.bottle, 0, 0, 0, P.cbottle, 12); cyl(0.045, 0.12, M.pink, 0, -0.03, 0, P.cbottle, 12); P.cbottle.rotation.x = -0.9;
+    // the trolley jack under the sill: a chassis on four castors, the lifting arm with its saddle, the handle that pumps
+    P.jack = gcJackMesh(); P.jack.position.set(0.1, 0, 0.75); P.jack.visible = false; g.add(P.jack);
+    // the parts van: a load box behind the cab
+    if (opt.van) { var vb = std({ color: col, roughness: 0.55 }); gcMesh(bevelGeo(2.0, 1.15, 1.84, 0.05), vb, g, -1.12, 1.55, 0); sign(['PARTS'], 1.4, 0.36, -1.12, 1.6, 0.93, 0, { bg: '#1b232c' }, g); sign(['PARTS'], 1.4, 0.36, -1.12, 1.6, -0.93, Math.PI, { bg: '#1b232c' }, g); }
+    g.userData.paint = paint; g.userData.parts = P; g.userData.dynamic = true;
+    return g;
+  }
+  // the trolley jack (also the jack prop's look): its arm and handle are their own groups (userData.arm, userData.handle)
+  function gcJackMesh() {
+    var M = gcMats(), j = new THREE.Group();
+    box(0.26, 0.07, 0.62, M.jack, 0, 0.08, 0.32, j); box(0.2, 0.04, 0.5, M.trim, 0, 0.125, 0.34, j);
+    [[0.12, 0.08], [-0.12, 0.08], [0.11, 0.58], [-0.11, 0.58]].forEach(function (p) { gcXcyl(0.045, 0.035, M.trim, p[0], 0.045, p[1], j, 12); });
+    var arm = gcGrp(j, 0, 0.13, 0.5); box(0.12, 0.05, 0.5, M.jack, 0, 0, -0.25, arm); var sad = gcGrp(arm, 0, 0.03, -0.5); cyl(0.06, 0.03, M.steel, 0, 0, 0, sad, 14); sad.userData.keepLevel = true; j.userData.saddle = sad;
+    cyl(0.04, 0.16, M.steel, 0, 0.2, 0.42, j, 12);
+    var hd = gcGrp(j, 0, 0.14, 0.64); hd.rotation.x = 0.95; cyl(0.015, 0.9, M.black, 0, 0.45, 0, hd, 8); cyl(0.022, 0.12, M.tyre, 0, 0.88, 0, hd, 10);
+    j.userData.arm = arm; j.userData.handle = hd;
+    return j;
+  }
+
+  // ── The work you can see ──────────────────────────────────────────
+  // every tick each moving part eases toward its pose for the job: what J.vis says, which steps are done, and how far the hold of the
+  // current step has filled (J.stepP: yours or a worker's). A step's anim key names what it moves (02-work.js, STEPS). snap: at once
+  function gcStepsDone(J, key) { var st = stepsOf(J); for (var i = 0; i < J.step && i < st.length; i++) if (st[i].anim === key) return true; return false; }
+  function gcEase(A, k, target, rate, snap, dt) { if (A[k] === undefined || snap) A[k] = target; else A[k] += (target - A[k]) * (1 - Math.exp(-(dt || 0) * (rate || 10))); return A[k]; }
+  function gcUpDown(u) { return u < 0.5 ? u / 0.5 : (1 - u) / 0.5; }   // up to the top at half way, back down by the end
+  function gcCarAnimate(b, dt, snap) {
+    var C = carIn(b), J = jobAt(b); if (!C || !C.parts) return; var P = C.parts, M = gcMats(), A = C.anim || (C.anim = {}), v = (J && J.vis) || {}, fault = C.rec.fault;
+    var s = J && J.state === 'taken' ? curStep(J) : null, key = s && s.anim, p = s ? clamp(J.stepP || 0, 0, 1) : 0;
+    var live = function (k) { return key === k && J.stepP > 0; }, done = function (k) { return !!J && gcStepsDone(J, k); };
+    var over = !J || J.state === 'done' || J.state === 'paid' || J.state === 'leaving', fixed = function (k) { return over || done(k) || (live(k) && p > 0.5); };
+    var h = carHeight(b), onLift = J && J.lift !== null && J.lift !== undefined;
+    C.g.position.y = h;
+    // the bonnet on its hinge, the stay once it is up
+    var lid = gcEase(A, 'lid', v.open ? 1.05 : 0, 5, snap, dt); P.lid.rotation.z = lid; P.stay.visible = lid > 0.98;
+    // the jack: on the floor under the sill while the car is up or a jack step fills; its arm reaches the sill, its handle pumps
+    var jackStep = !!(s && s.at === 'jack' && J.stepP > 0);
+    P.jack.visible = !!(v.up || jackStep) && !onLift; P.jack.position.y = -h;
+    if (P.jack.visible) { var reach = clamp((0.31 + h - 0.16) / 0.5, -1, 1), ang = Math.asin(reach); P.jack.userData.arm.rotation.x = -ang; P.jack.userData.saddle.rotation.x = ang; P.jack.userData.handle.rotation.x = 0.95 + (jackStep ? Math.sin(J.stepP * 22) * 0.35 : 0); }
+    // the wheel nuts: they spin and back out while you hold the brace, then lie in a pile; done up again the same way back
+    var nutsT = live('nutsoff') ? p : live('nutson') ? 1 - p : (done('nutsoff') && !done('nutson') && !over) ? 1 : 0; nutsT = gcEase(A, 'nuts', nutsT, 14, snap, dt);
+    var W = C.looseWheel; if (W && W.userData.nuts) W.userData.nuts.forEach(function (n) { var bz = n.userData.base; n.position.z = bz[2] + nutsT * 0.14; n.rotation.set(Math.PI / 2, nutsT * 14, 0); n.visible = nutsT < 0.9; });
+    P.nutPile.visible = nutsT >= 0.9 || (!!v.wheelOff && !over); P.nutPile.position.y = -h;
+    // the wheel: it slides off the studs, then is laid flat on the floor by the car (or goes with you to the tyre corner)
+    var wt = gcEase(A, 'wheel', v.wheelOff ? 1 : 0, 4, snap, dt), away = !!v.wheelOff && J && stepsOf(J).some(function (x) { return x.at === 'tyre'; });
+    if (W) {
+      if (wt <= 0.4) { W.position.set(1.4, 0.33, 0.95 + wt / 0.4 * 0.3); W.rotation.x = 0; }
+      else { var u = (wt - 0.4) / 0.6; W.position.set(1.4 + u * 0.2, 0.33 + (0.115 - h - 0.33) * u, 1.25 + u * 0.4); W.rotation.x = -u * Math.PI / 2; }
+      W.visible = !(away && wt > 0.45);
+    }
+    // the brakes: the caliper swings up off the disc while the pads are changed; for discs the disc slides off the hub and back
+    var lift = live('pads') || live('discs') ? Math.sin(p * Math.PI) : 0; lift = gcEase(A, 'cal', lift, 14, snap, dt);
+    P.caliper.position.set(P.calBase[0] - lift * 0.05, P.calBase[1] + lift * 0.16, P.calBase[2] + lift * 0.08);
+    var discOff = gcEase(A, 'disc', live('discs') ? Math.sin(p * Math.PI) : 0, 14, snap, dt); P.disc.position.z = P.discBase + discOff * 0.22;
+    var padsNew = fixed('pads') || fixed('discs') || (fault !== 'brakes' && fault !== 'discs'); P.pads.children.forEach(function (m) { m.material = padsNew ? M.pad : M.padOld; });
+    P.disc.material = fault === 'discs' && !fixed('discs') ? M.discOld : M.disc;
+    // the sump plug spins out and drops into the pan; the old oil runs out in a stream and fills the pan
+    var plugT = live('plugout') ? p : live('plugin') ? 1 - p : (done('plugout') && !done('plugin') && !over) ? 1 : 0; plugT = gcEase(A, 'plug', plugT, 14, snap, dt);
+    P.sumpPlug.position.y = P.sumpPlugBase - plugT * 0.05; P.sumpPlug.rotation.y = plugT * 12; P.sumpPlug.visible = plugT < 0.9;
+    P.pan.visible = !!v.pan; P.pan.position.y = -h; P.panPlug.visible = plugT >= 0.9;
+    var lvl = live('drain') ? p : (done('drain') && !over) ? 1 : 0; lvl = gcEase(A, 'lvl', lvl, 6, snap, dt); P.panOil.visible = lvl > 0.02; P.panOil.position.y = 0.015 + lvl * 0.05;
+    var flow = !!v.pan && (live('drain') || (live('plugout') && p > 0.85)), bottom = -h + 0.02 + lvl * 0.05, top = P.sumpPlugBase - 0.02;
+    P.stream.visible = flow; if (flow) { P.stream.scale.y = Math.max(0.01, top - bottom); P.stream.position.y = (top + bottom) / 2; }
+    // the oil filter spins down off its thread and a new one goes on
+    var fu = live('filter') ? p : 0; P.filter.position.y = P.filterBase - gcUpDown(fu) * 0.14; P.filter.rotation.y = fu * 24; P.filter.material = fixed('filter') ? M.blue : M.filterOld;
+    // filling: the filler cap comes off and the jug pours; the coolant the same with its own cap and bottle, the level rising in the tank
+    var filling = key === 'oilfill' && J.stepP > 0, capT = gcEase(A, 'cap', key === 'oilfill' ? 1 : 0, 8, snap, dt);
+    P.cap.position.set(P.capBase[0], P.capBase[1] + capT * 0.03, P.capBase[2] + capT * 0.09); P.can.visible = filling; P.canStream.visible = filling;
+    var cooling = key === 'coolant' && J.stepP > 0, ccT = gcEase(A, 'ccap', key === 'coolant' ? 1 : 0, 8, snap, dt);
+    P.coolCap.position.set(P.coolCapBase[0], P.coolCapBase[1] + ccT * 0.03, P.coolCapBase[2] + ccT * 0.09); P.cbottle.visible = cooling;
+    var level = fault === 'coolant' && !fixed('coolant') ? 0.3 : 0.85; if (live('coolant')) level = 0.3 + Math.min(1.1, J.stepP) * 0.55; level = gcEase(A, 'cool', level, 8, snap, dt);
+    P.coolFluid.scale.y = level; P.coolFluid.position.y = 0.76 + 0.07 * level;   // the tank's bottom stays put as the level rises
+    // the battery: the clamp unbolts and comes off, the old battery lifts out and the new one goes in; a loose terminal is furred white
+    var clampT = live('clamp') ? p : (done('clamp') && !over) ? 1 : 0; clampT = gcEase(A, 'clamp', clampT, 10, snap, dt);
+    P.clamp.position.y = P.clampBase + clampT * 0.14; P.clamp.position.x = 1.72 + clampT * 0.12; P.clamp.rotation.y = clampT * 0.6;
+    var bu = live('battery') ? p : 0; P.battery.position.y = P.batteryBase + gcUpDown(bu) * 0.34;
+    P.batLabel.material = fault === 'battery' && !fixed('battery') ? M.labelOld : M.labelNew;
+    P.termNut.rotation.y = live('terminal') ? p * 18 : 0; P.fuzz.visible = fault === 'terminal' && !fixed('terminal');
+    // the headlight: its cover twists off the back, the bulb comes out and a new one goes in; the lamp lights again once it is fixed
+    var lu = live('bulb') ? p : 0, capOut = lu < 0.3 ? lu / 0.3 : lu < 0.7 ? 1 : (1 - lu) / 0.3, bulbOut = lu < 0.3 ? 0 : lu < 0.5 ? (lu - 0.3) / 0.2 : lu < 0.7 ? (0.7 - lu) / 0.2 : 0;
+    P.lampCap.position.x = P.lampCapBase - capOut * 0.12; P.lampCap.rotation.x = capOut * 2.4; P.bulb.position.x = P.bulbBase - bulbOut * 0.16; P.bulb.visible = capOut > 0.4;
+    var lensMat = fault === 'bulb' && !fixed('bulb') ? M.trim : M.head; P.lensNear.forEach(function (m) { m.material = lensMat; });
+    // the air box: the lid lifts, the filter comes up out of it (dirty when that is the fault) and a clean one goes back; a look for a check opens it too
+    var au = live('airfilter') ? p : 0, lidUp = au < 0.3 ? au / 0.3 : au < 0.7 ? 1 : (1 - au) / 0.3, elUp = au < 0.3 ? 0 : au < 0.5 ? (au - 0.3) / 0.2 : au < 0.7 ? (0.7 - au) / 0.2 : 0;
+    if (G.hold && G.hold.check === 'airbox' && G.hold.bay === b && J && J.diag) lidUp = Math.min(1, J.diag.p * 2);
+    lidUp = gcEase(A, 'air', lidUp, 12, snap, dt); P.airLid.position.y = P.airLidBase + lidUp * 0.14; P.airLid.rotation.z = lidUp * 0.6; P.airFilter.position.y = P.airFilterBase + elUp * 0.24;
+    var pm = fault === 'airfilter' && !fixed('airfilter') ? M.pleatDirty : M.pleat; P.airPleats.forEach(function (m) { m.material = pm; });
+    // the spark plugs: the coil packs lift, the plugs come out (sooty when that is the fault) and new ones go in
+    var pu = live('plugs') ? p : 0, coilUp = pu < 0.25 ? pu / 0.25 : pu < 0.75 ? 1 : (1 - pu) / 0.25, plugUp = pu < 0.25 ? 0 : pu < 0.5 ? (pu - 0.25) / 0.25 : pu < 0.75 ? (0.75 - pu) / 0.25 : 0;
+    var sm = fault === 'plugs' && !fixed('plugs') ? M.sooty : M.ceramic;
+    P.coils.forEach(function (c, i) { c.position.y = c.userData.base + coilUp * (0.12 + i * 0.01); }); P.plugs.forEach(function (pl) { pl.position.y = pl.userData.base + plugUp * 0.16; pl.children[0].material = sm; });
+    // the wipers lift off the glass while the blades are changed
+    var wl = gcEase(A, 'wip', live('wipers') ? Math.sin(p * Math.PI) : 0, 12, snap, dt); P.wipers.forEach(function (w) { w.rotation.x = wl * 0.9; });
+    // the exhaust: the old silencer is unbolted and lowered to the floor, the new one (bright) is lifted into place and bolted on
+    var exT = live('exhoff') ? p : live('exhon') ? 1 - p : (done('exhoff') && !done('exhon') && !over) ? 1 : 0; exT = gcEase(A, 'exh', exT, 10, snap, dt);
+    P.silencer.position.y = P.silencerBase + (-h + 0.08 - P.silencerBase) * exT; P.silencer.rotation.x = exT * 0.15;
+    var exNew = done('exhoff') || (fault === 'exhaust' && over); P.silencer.children.forEach(function (m) { m.material = exNew ? M.exhaustNew : M.exhaust; });
+  }
+
+  // ── The tools ─────────────────────────────────────────────────────
+  // each tool hangs with its long side up, centred on its hook; the same model goes in your hand
+  function gcToolMesh(t) {
+    var M = gcMats(), g = new THREE.Group();
+    if (t === 'spanner') {
+      box(0.024, 0.22, 0.008, M.chrome, 0, 0, 0, g); var ring = gcMesh(new THREE.TorusGeometry(0.026, 0.009, 6, 16), M.chrome, g, 0, 0.13, 0);
+      box(0.012, 0.045, 0.009, M.chrome, -0.02, -0.13, 0, g).rotation.z = 0.2; box(0.012, 0.045, 0.009, M.chrome, 0.02, -0.13, 0, g).rotation.z = -0.2; box(0.05, 0.016, 0.009, M.chrome, 0, -0.112, 0, g);
+    } else if (t === 'brace') {
+      cyl(0.011, 0.4, M.steel, 0, 0.02, 0, g, 8); gcXcyl(0.011, 0.14, M.steel, 0.07, -0.18, 0, g, 8); cyl(0.022, 0.06, M.chrome, 0.14, -0.17, 0, g, 12); cyl(0.018, 0.05, M.chrome, 0, 0.24, 0, g, 12);
+    } else if (t === 'filterwrench') {
+      cyl(0.012, 0.22, M.red, 0, -0.04, 0, g, 8); cyl(0.016, 0.1, M.tyre, 0, -0.12, 0, g, 10); var band = gcMesh(new THREE.TorusGeometry(0.05, 0.006, 6, 20), M.steel, g, 0, 0.12, 0); band.rotation.x = Math.PI / 2;
+    } else if (t === 'socket') {
+      box(0.022, 0.18, 0.012, M.chrome, 0, -0.02, 0, g); cyl(0.016, 0.07, M.tyre, 0, -0.08, 0, g, 10); gcZcyl(0.028, 0.02, M.chrome, 0, 0.08, 0, g, 14); cyl(0.013, 0.1, M.chrome, 0, 0.13, 0.012, g, 10);
+    } else if (t === 'reader') {
+      gcMesh(bevelGeo(0.09, 0.15, 0.03, 0.01), M.yellow, g, 0, 0.02, 0); box(0.066, 0.05, 0.004, M.screen, 0, 0.05, 0.016, g);
+      [-0.02, 0.02].forEach(function (x) { box(0.016, 0.012, 0.004, M.trim, x, 0.0, 0.016, g); }); box(0.016, 0.016, 0.004, M.red, 0, -0.025, 0.016, g);
+      cyl(0.005, 0.12, M.trim, 0, -0.12, 0, g, 6); box(0.03, 0.03, 0.02, M.trim, 0, -0.19, 0, g);
+    }
+    return g;
+  }
+  // ── The parts, as they sit on the shelves ─────────────────────────
+  // each part type has its own look: a jug of oil, a filter, a battery, a coolant bottle, a pleated air filter, a tin of plugs, or a
+  // printed carton for the rest. Made once a type, cloned for each one on a shelf (the clones share geometry and materials)
+  var GC_PARTS = {};
+  function gcLabelMat(p) {
+    var key = 'lbl:' + p; if (GC_PARTS[key]) return GC_PARTS[key];
+    var c = document.createElement('canvas'); c.width = 256; c.height = 160; var x = c.getContext('2d'), P = PARTS[p] || { name: p, col: 0x888888 };
+    x.fillStyle = '#b48a5a'; x.fillRect(0, 0, 256, 160); x.fillStyle = '#' + ('000000' + P.col.toString(16)).slice(-6); x.fillRect(0, 0, 256, 46); x.fillRect(0, 140, 256, 20);
+    x.fillStyle = '#1b232c'; x.font = 'bold 30px sans-serif'; x.textAlign = 'center'; var words = String(P.name).toUpperCase().split(' '), l1 = words.slice(0, Math.ceil(words.length / 2)).join(' '), l2 = words.slice(Math.ceil(words.length / 2)).join(' ');
+    x.fillText(l1, 128, 86); if (l2) x.fillText(l2, 128, 122); x.fillStyle = '#ffffff'; x.font = 'bold 22px sans-serif'; x.fillText('GARAGE CO. PARTS', 128, 32);
+    var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+    return (GC_PARTS[key] = std({ map: t, roughness: 0.9 }));
+  }
+  function gcCarton(p, w, h, d, parent, y) { var M = gcMats(), L = gcLabelMat(p), m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [M.cardboard, M.cardboard, L, M.cardboard, L, L]); m.position.y = y + h / 2; m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; }
+  function gcPartMesh(p) {
+    if (!GC_PARTS[p]) {
+      var M = gcMats(), g = new THREE.Group();
+      if (p === 'oil') { gcMesh(bevelGeo(0.15, 0.2, 0.1, 0.02), M.yellow, g, 0, 0.1, 0); var hd = gcMesh(new THREE.TorusGeometry(0.03, 0.01, 6, 12), M.yellow, g, 0.035, 0.2, 0); cyl(0.02, 0.03, M.trim, -0.045, 0.215, 0, g, 10); box(0.11, 0.08, 0.004, gcLabelMat(p), 0, 0.09, 0.052, g); }
+      else if (p === 'oilfilter') { cyl(0.05, 0.1, M.blue, 0, 0.05, 0, g, 16); cyl(0.04, 0.012, M.steel, 0, 0.106, 0, g, 16); }
+      else if (p === 'battery') { box(0.18, 0.15, 0.12, M.black, 0, 0.075, 0, g); box(0.182, 0.04, 0.122, M.labelNew, 0, 0.09, 0, g); cyl(0.014, 0.025, M.red, 0.05, 0.16, 0.03, g, 8); cyl(0.014, 0.025, M.trim, -0.05, 0.16, 0.03, g, 8); }
+      else if (p === 'coolant') { cyl(0.045, 0.17, M.pink, 0, 0.085, 0, g, 14); cyl(0.022, 0.03, M.trim, 0, 0.185, 0, g, 10); box(0.06, 0.07, 0.004, gcLabelMat(p), 0, 0.08, 0.045, g); }
+      else if (p === 'airfilter') { box(0.19, 0.03, 0.23, M.orange, 0, 0.015, 0, g); for (var q = 0; q < 6; q++) box(0.025, 0.03, 0.2, M.pleat, -0.075 + q * 0.03, 0.03, 0, g); }
+      else if (p === 'plugkit') { cyl(0.05, 0.05, M.orange, 0, 0.025, 0, g, 16); cyl(0.05, 0.006, M.steel, 0, 0.052, 0, g, 16); }
+      else if (p === 'wipers') gcCarton(p, 0.07, 0.05, 0.25, g, 0);
+      else if (p === 'bulb') { gcCarton(p, 0.08, 0.1, 0.06, g, 0); gcCarton(p, 0.08, 0.1, 0.06, g, 0).position.x = 0.09; }
+      else if (p === 'pads') gcCarton(p, 0.18, 0.08, 0.14, g, 0);
+      else if (p === 'plugs') gcCarton(p, 0.15, 0.06, 0.1, g, 0);
+      else if (p === 'tyre') { var ty = gcMesh(gcTyreGeo(), M.tyre, g, 0, 0.11, 0); ty.scale.set(0.33, 0.33, 0.33); gcCarton(p, 0.2, 0.02, 0.22, g, 0); }
+      else if (p === 'exhaust') { gcCarton(p, 0.2, 0.12, 0.25, g, 0); }
+      else if (p === 'discs') gcCarton(p, 0.2, 0.07, 0.2, g, 0);
+      else gcCarton(p, 0.2, 0.16, 0.24, g, 0);
+      g.traverse(function (o) { o.castShadow = true; });
+      GC_PARTS[p] = g;
+    }
+    return GC_PARTS[p].clone();
+  }
+
+  // ── In your hands ─────────────────────────────────────────────────
+  // what you carry shows at the bottom of the view: the tool off the wall, a wheel on its way to the tyre corner, a job's parts. It
+  // works a little while you hold E at a step. Not while you drive
+  function gcHeldSync(dt) {
+    if (typeof camera === 'undefined' || !camera) return;
+    var key = G.drive ? '' : (S.tool || '') + '|' + (S.hand ? S.hand.kind + ':' + S.hand.bay : '');
+    var H = G.held || (G.held = { g: null, key: null, t: 0 });
+    if (key !== H.key) {
+      if (H.g) scene.remove(H.g); H.g = null; H.key = key;
+      if (key && key !== '|') {
+        var g = new THREE.Group(); g.userData.dynamic = true; H.g = g; scene.add(g);
+        if (S.tool) { var tm = gcToolMesh(S.tool); tm.position.set(0.26, -0.27, -0.45); tm.rotation.set(-0.5, 0.45, 0.75); tm.scale.set(0.6, 0.6, 0.6); g.add(tm); H.tool = tm; } else H.tool = null;
+        if (S.hand && S.hand.kind === 'wheel') { var wm = gcWheelMesh(1); wm.position.set(-0.05, -0.42, -0.62); wm.rotation.set(0.3, 0.4, 0); wm.scale.set(0.9, 0.9, 0.9); g.add(wm); }
+        else if (S.hand && S.hand.kind === 'parts') { var J = jobAt(S.hand.bay), list = J ? partsOf(J.faults || []) : []; if (list.length) { var pm = gcPartMesh(list[0]); pm.position.set(-0.16, -0.3, -0.45); pm.rotation.set(0.2, 0.5, 0); g.add(pm); } }
+        g.traverse(function (o) { o.castShadow = false; o.receiveShadow = false; });
+      }
+    }
+    if (!H.g) return;
+    H.t += dt || 0; H.g.position.copy(camera.position); H.g.quaternion.copy(camera.quaternion);
+    if (H.tool) { var work = G.hold && !G.hold.fill ? Math.sin(H.t * 16) * 0.18 : 0; H.tool.rotation.z = 0.75 + work; H.tool.position.y = -0.27 + Math.sin(H.t * 2) * 0.004; }
+  }
+  // the driver's view: in the left seat (left-hand drive), looking over the dashboard; the steering wheel turns with A and D, right for D
+  function gcDriverCamera(C, D) {
+    C.g.updateMatrixWorld(true); var e = C.g.localToWorld(new THREE.Vector3(-0.22, 1.22, -0.4));
+    camera.position.copy(e); camera.rotation.set(D.look ? D.look.pitch : 0, D.v.yaw + Math.PI + (D.look ? D.look.yaw : 0), 0, 'YXZ');
+    var P = C.g.userData.parts; if (P && P.steer) { var want = ((player.keys.KeyD ? 1 : 0) - (player.keys.KeyA ? 1 : 0)) * 1.4; P.steer.rotation.x += (want - P.steer.rotation.x) * 0.15; }
+  }
   // ── The lifts ─────────────────────────────────────────────────────
   // a two-post lift a hall, in the hall's own frame, just inside its roll door; the car stands on it nose to the back wall. Lift 0 is
   // the lock-up's; lift 1 comes with the two-bay garage. A car on a lift does its jack steps on the lift instead (J.lift)
@@ -8347,7 +8746,7 @@
   // the height the car stands at now: on a lift it rises as the step fills
   function carHeight(b) {
     var J = jobAt(b), v = (J && J.vis) || {}; if (!J) return 0;
-    if (J.lift === null || J.lift === undefined) return v.up ? 0.14 : 0;
+    if (J.lift === null || J.lift === undefined) { var sj = curStep(J), fj = v.up ? 1 : 0; if (sj && sj.at === 'jack' && J.stepP > 0) fj = sj.fx === 'up' ? Math.min(1, J.stepP) : 1 - Math.min(1, J.stepP); return fj * 0.14; }   // the jack lifts it as its step fills
     var s = curStep(J), f = v.up ? 1 : 0; if (s && s.at === 'lift' && J.stepP > 0) f = s.fx === 'up' ? Math.min(1, J.stepP) : 1 - Math.min(1, J.stepP);
     return f * LIFT_H;
   }
@@ -8399,7 +8798,7 @@
     driveStep(D.v, player.keys, dt, { spec: CAR_DRIVE, blocked: driveBlocked });
     C.x = D.v.x; C.z = D.v.z; C.yaw = D.v.yaw - Math.PI / 2; C.g.position.set(C.x, 0, C.z); C.g.rotation.y = C.yaw;
     var ws = C.g.userData.wheels; if (ws && D.v.speed) ws.forEach(function (w) { w.rotation.z -= D.v.speed * dt / 0.33; });
-    player.x = C.x; player.z = C.z; vehicleCamera(D.v, D.look, 1.22, 0.25);
+    player.x = C.x; player.z = C.z; gcDriverCamera(C, D);
     return true;
   };
   GAME.useOverride = function () { if (G.drive) { getOut(); return true; } return false; };
@@ -8423,12 +8822,16 @@
   function newCar(faultId) {
     var pool = faultsOpen(), f = faultId ? faultById(faultId) : pick(pool);
     var car = { id: uid('car'), make: pick(MAKES), col: pick(CAR_COLS), name: pick(NAMES), fault: f.id, plate: 'GC ' + randi(10, 99) + ' ' + pick(['AB', 'KH', 'NL', 'XY']) + randi(100, 999) };
-    // about a car in three has a second thing wrong that the customer did not mention: you spot it and offer it (the upsell)
-    var others = pool.filter(function (x) { return x.id !== f.id; });
+    // what the customer says: one of the symptoms the fault shows as (some of them could be another fault too)
+    var syms = symptomsFor(f.id); if (syms.length) car.sym = pick(syms).id;
+    // about a car in three has a second thing wrong that the customer did not mention: you spot it and offer it (the upsell). Never one
+    // of the answers its symptom could be, or the upsell would give the diagnosis away
+    var could = symptomOf(car).faults, others = pool.filter(function (x) { return x.id !== f.id && could.indexOf(x.id) < 0; });
     if (others.length && Math.random() < 0.33) car.extra = pick(others).id;
     return car;
   }
-  function jobFaults(J) { return J.faults || [J.car.fault]; }
+  // the faults on the invoice: the ones being worked, and a second fault already done before a wrong name sent the job back
+  function jobFaults(J) { return J.faults ? J.faults.concat(J.doneExtra || []) : [J.car.fault]; }
   function jobName(J) { return jobFaults(J).map(function (id) { return faultById(id).job; }).join(' and '); }
   function partsOf(faults) { var out = []; faults.forEach(function (id) { (faultById(id).parts || []).forEach(function (p) { out.push(p); }); }); return out; }
   // labour goes up with the name the garage has; parts go on the invoice at their selling price
@@ -8438,7 +8841,11 @@
   function carPrompt(b) {
     var J = jobAt(b); if (!J) return null;
     if (J.state === 'waiting') return 'Look at the ' + J.car.make + ': ' + J.car.name + ' is coming to the desk';
-    if (J.state === 'taken') { var s = curStep(J), onLift = J.lift !== null && J.lift !== undefined, drive = canDrive(b) ? '' : onLift ? ' · E: get in' : ' · E: drive it onto the lift'; return J.car.name + "'s " + J.car.make + ' · ' + jobName(J) + (s ? ' · next: ' + s.label + ' (' + placeName(s.at) + ')' : '') + drive; }
+    if (J.state === 'taken') {
+      var s = curStep(J), onLift = J.lift !== null && J.lift !== undefined, drive = canDrive(b) ? '' : onLift ? ' · E: get in' : ' · E: drive it onto the lift';
+      if (diagnosing(J)) { var ck = checksFor(J); return J.car.name + "'s " + J.car.make + ' · find the fault: ' + shortList(candList(J)) + (ck.length ? ' · check ' + ck.map(function (c) { return placeName(CHECKS[c].at); }).join(', ') : '') + ' · name it on the job card' + drive; }
+      return J.car.name + "'s " + J.car.make + ' · ' + jobName(J) + (s ? ' · next: ' + s.label + ' (' + placeName(s.at) + ')' : '') + drive;
+    }
     if (J.state === 'done') return 'Fixed. ' + J.car.name + ' pays at the desk';
     return J.car.name + "'s " + J.car.make;
   }
@@ -8447,8 +8854,9 @@
   // a car arrives on the road from the west, comes through the gap in the bollards, along the apron, and noses into its bay
   function spawnCar(b, car, comeback) {
     if (b === undefined || b === null) b = freeBay(); if (b < 0 || carIn(b)) return null;
-    car = car || newCar(); var faults = [car.fault], pr = priceFor(faults);
-    S.jobs[b] = { bay: b, car: car, faults: faults, state: 'coming', step: 0, stepP: 0, price: comeback ? 0 : pr.total, parts: comeback ? 0 : pr.parts, day: S.day, due: null, assign: null, vis: {}, comeback: !!comeback, offered: false };
+    // a symptom that can be only one open fault names the job at once; otherwise it is found at the car, and priced when it is named
+    car = car || newCar(); var diag = diagStart(car, comeback), faults = diag.named ? [diag.named] : [], pr = priceFor(faults);
+    S.jobs[b] = { bay: b, car: car, faults: faults, diag: diag, state: 'coming', step: 0, stepP: 0, price: comeback ? 0 : pr.total, parts: comeback ? 0 : pr.parts, day: S.day, due: null, assign: null, vis: {}, comeback: !!comeback, offered: false };
     placeCar(b, car, -78, ROAD_Z + LANE, 0, arrivePath(b));
     logEvent(comeback ? car.name + ' is coming back with the ' + car.make + '. Something is not right.' : car.name + ' is on the way in a ' + car.make + '.', comeback ? 'bad' : ''); hudDirty = true; screenDirtyAll();
     return car;
@@ -8456,7 +8864,7 @@
   function arrivePath(b) { var B = BAYS[b]; return [[ENTRY_X, ROAD_Z + LANE, 9], [ENTRY_X, APRON_Z, 3.5], [B.x, APRON_Z, 3.5], [B.x, B.z, 3]]; }
   function leavePath(b) { var B = BAYS[b], off = liftExit(b); return (off || [[B.x, APRON_Z, 3]]).concat([[ENTRY_X, APRON_Z, 3.5], [ENTRY_X, ROAD_Z + LANE, 3.5], [90, ROAD_Z + LANE, 10]]); }
   function placeCar(b, car, x, z, yaw, path) {
-    var g = carMesh({ col: car.col, plate: car.plate }); g.userData.dynamic = true; scene.add(g); g.position.set(x, 0, z); g.rotation.y = yaw;
+    var g = gcCar({ col: car.col, plate: car.plate }); g.userData.dynamic = true; scene.add(g); g.position.set(x, 0, z); g.rotation.y = yaw;
     var C = { rec: car, g: g, x: x, z: z, yaw: yaw, path: path || [], speed: 0, bay: b };
     bayOf(b).car = C;
     C.hit = hitBox(4.4, 1.5, 2.0, 0, 0.75, 0, { gcCar: b, prompt: function () { return carPrompt(b); }, use: function () { carUse(b); } }, g);
@@ -8506,7 +8914,7 @@
     var cu = { g: g, rec: rec, walking: false, at: atDesk ? 'desk' : 'car', goal: 'desk', car: car, bay: b };
     bayOf(b).customer = cu;
     cu.hit = hitBox(0.7, 1.9, 0.7, 0, 0.95, 0, { prompt: function () { return customerPrompt(b); }, use: function () { customerUse(b); } }, g);
-    if (!atDesk) { customerGo(b, 'desk'); say(g, (jobAt(b) && jobAt(b).comeback ? 'You again. ' : 'Morning. ') + faultOf(car).symptom); }
+    if (!atDesk) { customerGo(b, 'desk'); say(g, (jobAt(b) && jobAt(b).comeback ? 'You again. ' : 'Morning. ') + symptomOf(car).says); }
     return cu;
   }
   function customerGo(b, goal) { var c = customerIn(b), C = carIn(b); if (!c) return; c.goal = goal; c.walking = true; var to = goal === 'car' && C ? { x: C.x + 1.7, z: C.z } : deskStand(b); c.rec.path = route({ x: c.rec.x, z: c.rec.z }, to); }
@@ -8514,8 +8922,8 @@
   function customerPrompt(b) {
     var J = jobAt(b), c = customerIn(b); if (!J || !c) return null;
     if (c.walking) return J.car.name + (c.goal === 'desk' ? ' is coming to the desk' : ' is going back to the car');
-    if (J.state === 'waiting') return 'Take the job from ' + J.car.name + ': ' + faultOf(J.car).symptom + (J.comeback ? ' (a comeback: free)' : ' (' + money(J.price) + ')');
-    if (J.state === 'taken') return J.car.extra && !J.offered ? 'Offer ' + J.car.name + ' ' + faultById(J.car.extra).job + ' too (' + money(priceFor([J.car.extra]).total) + ')' : J.car.name + ' is waiting for the ' + J.car.make + (J.due ? ', promised for ' + fmtTime(J.due) : '');
+    if (J.state === 'waiting') return 'Take the job from ' + J.car.name + ': ' + symptomOf(J.car).says + (J.comeback ? ' (a comeback: free)' : unnamed(J) ? ' (it could be ' + shortList(candList(J)) + ': find the fault, then the price)' : ' (' + money(J.price) + ')');
+    if (J.state === 'taken') return J.car.extra && !J.offered && !unnamed(J) ? 'Offer ' + J.car.name + ' ' + faultById(J.car.extra).job + ' too (' + money(priceFor([J.car.extra]).total) + ')' : J.car.name + ' is waiting for the ' + J.car.make + (unnamed(J) ? ' while you find the fault' : '') + (J.due ? ', promised for ' + fmtTime(J.due) : '');
     if (J.state === 'done') return 'Take the payment: ' + money(J.price) + ' for ' + jobName(J);
     return J.car.name;
   }
@@ -8523,7 +8931,7 @@
     var J = jobAt(b), c = customerIn(b); if (!J || !c || c.walking) return;
     if (J.state === 'waiting') takeJob(b);
     else if (J.state === 'done') takePayment(b);
-    else if (J.state === 'taken') { if (J.car.extra && !J.offered) offerExtra(b); else say(c.g, 'Take your time. Well, not too much.'); }
+    else if (J.state === 'taken') { if (J.car.extra && !J.offered && !unnamed(J)) offerExtra(b); else say(c.g, unnamed(J) ? 'Any idea what it is yet?' : 'Take your time. Well, not too much.'); }
   }
   // a roll door rides up for anyone walking through it: the customers and the staff
   function someoneNear(dx) {
@@ -8553,13 +8961,13 @@
   function takeJob(b, by) {
     b = b || 0; var J = jobAt(b); if (!J || J.state !== 'waiting') return false;
     J.state = 'taken'; J.step = 0; J.stepP = 0; J.due = Math.min(CLOSE_AT, S.time + 1.5); sfx('ok');
-    toast('Job card, bay ' + (b + 1) + ': ' + jobName(J) + (J.comeback ? ' (a comeback, no charge)' : ' for ' + money(J.price)) + '. Promised for ' + fmtTime(J.due) + '.', 'good');
-    logEvent((by === 'staff' ? 'The desk took' : 'Took') + ' the job: ' + jobName(J) + ' on ' + J.car.name + "'s " + J.car.make + '.', 'good');
+    toast('Job card, bay ' + (b + 1) + ': ' + (unnamed(J) ? 'find the fault. It could be ' + shortList(candList(J)) + ': the job card says what to check' : jobName(J) + (J.comeback ? ' (a comeback, no charge)' : ' for ' + money(J.price))) + '. Promised for ' + fmtTime(J.due) + '.', 'good');
+    logEvent((by === 'staff' ? 'The desk took' : 'Took') + ' the job: ' + jobLabel(J) + ' on ' + J.car.name + "'s " + J.car.make + '.', 'good');
     if (customerIn(b)) say(customerIn(b).g, 'Great. I will wait here.'); screenDirtyAll(); hudDirty = true; return true;
   }
   // the upsell: you spotted something else; the customer says yes more often the better your name
   function offerExtra(b) {
-    var J = jobAt(b); if (!J || J.state !== 'taken' || !J.car.extra || J.offered) return false;
+    var J = jobAt(b); if (!J || J.state !== 'taken' || !J.car.extra || J.offered || unnamed(J)) return false;
     J.offered = true; var x = J.car.extra, f = faultById(x), pr = priceFor([x]), c = customerIn(b);
     if (Math.random() < 0.35 + S.rep * 0.0065) {
       J.faults.push(x); J.price += pr.total; J.parts += pr.parts; J.due = Math.min(CLOSE_AT, (J.due || S.time) + 1); J.hold = null;
@@ -8571,7 +8979,7 @@
   function jobFinished(b, by) {
     var J = jobAt(b); if (!J) return; J.state = 'done'; sfx('bell'); S.stats.fixed++; addXp(10);
     toast('Fixed: ' + jobName(J) + ' on ' + J.car.name + "'s " + J.car.make + '. Take the payment at the desk.', 'good'); logEvent('Fixed ' + jobName(J) + ' on the ' + J.car.make + (by && by !== 'player' ? ' (' + by + ')' : '') + '.', 'good');
-    if (J.sloppy) S.comebacks.push({ day: S.day + randi(1, 2), car: { id: J.car.id, make: J.car.make, col: J.car.col, name: J.car.name, fault: J.car.fault, plate: J.car.plate } });
+    if (J.sloppy) S.comebacks.push({ day: S.day + randi(1, 2), car: { id: J.car.id, make: J.car.make, col: J.car.col, name: J.car.name, fault: J.car.fault, sym: J.car.sym, plate: J.car.plate } });
     if (!customerIn(b)) { var cu = spawnCustomer(b, J.car, true); if (cu) say(cu.g, 'I have come for the ' + J.car.make + '.'); }
     if (S.hand && S.hand.bay === b) S.hand = null;
     screenDirtyAll(); hudDirty = true;
@@ -8633,7 +9041,7 @@
     for (var b = 0; b < S.jobs.length; b++) {
       var J = S.jobs[b]; if (!J) continue;
       if (b >= bayCount() || J.state === 'coming' || J.state === 'leaving' || J.state === 'paid') { if (S.hand && S.hand.bay === b) S.hand = null; S.jobs[b] = null; continue; }
-      if (!J.faults) J.faults = [J.car.fault]; if (!J.vis) J.vis = {}; if (J.step === undefined) J.step = 0; if (J.state === 'fixing') J.state = 'taken';
+      if (!J.faults) J.faults = [J.car.fault]; if (!J.diag) J.diag = diagStart(J.car, true); if (!J.vis) J.vis = {}; if (J.step === undefined) J.step = 0; if (J.state === 'fixing') J.state = 'taken';
       var onLift = J.lift !== null && J.lift !== undefined; if (onLift && !liftBuilt(J.lift)) { J.lift = null; onLift = false; }
       var at = onLift ? liftWorld(J.lift) : BAYS[b];
       placeCar(b, J.car, at.x, at.z, onLift && J.pos ? J.pos.yaw : Math.PI / 2, []); workRestore(b);
@@ -8648,15 +9056,27 @@
       var y = 50 + b * h, J = jobAt(b);
       if (!J) { scText(c, 16, y + 22, 'Bay ' + (b + 1) + ': no car in. The next one is on its way.', '#a0acb8', 13); continue; }
       scText(c, 16, y + 20, 'Bay ' + (b + 1) + ' · ' + J.car.make + ' · ' + J.car.plate, '#eef1f5', 14);
-      scText(c, 16, y + 38, J.car.name + ': ' + jobName(J), '#a0acb8', 12);
+      if (diagnosing(J)) { drawDiagCard(c, sc, b, J, y, h); continue; }
+      scText(c, 16, y + 38, J.car.name + ': ' + jobLabel(J), '#a0acb8', 12);
       var s = J.state === 'taken' ? curStep(J) : null, steps = stepsOf(J);
       scText(c, 16, y + 58, J.state === 'waiting' ? 'Customer at the desk' : s ? 'Step ' + (J.step + 1) + ' of ' + steps.length + ': ' + s.label + (J.stepP > 0 ? ' · ' + Math.round(Math.min(J.stepP, 1.5) * 100) + '%' : '') : J.state === 'done' ? 'Fixed: take ' + money(J.price) + ' at the desk' : J.state, J.state === 'done' ? '#5fd38d' : '#f5b53d', 13);
       if (J.hold === 'parts') scText(c, 16, y + 76, 'Waiting on parts: ' + missingParts(J).map(function (p) { return PARTS[p].name; }).join(', '), '#ff6b5e', 12);
       var cu = customerIn(b), here = cu && !cu.walking, bx = sc.w - 150;
       if (J.state === 'waiting' && here) scButton(sc, bx, y + 8, 134, 32, 'Take the job', true, takeJob.bind(null, b));
       if (J.state === 'done' && here) scButton(sc, bx, y + 8, 134, 32, 'Take payment', true, takePayment.bind(null, b));
-      if (J.state === 'taken' && J.car.extra && !J.offered && here) scButton(sc, bx, y + 8, 134, 32, 'Offer the extra', true, offerExtra.bind(null, b));
+      if (J.state === 'taken' && J.car.extra && !J.offered && !unnamed(J) && here) scButton(sc, bx, y + 8, 134, 32, 'Offer the extra', true, offerExtra.bind(null, b));
     }
+  }
+  // a bay whose fault is being found: what the customer said, the findings so far (or the checks to do), and a button an answer
+  function drawDiagCard(c, sc, b, J, y, h) {
+    var D = J.diag, w = sc.w - 32, found = CHECK_IDS.filter(function (k) { return D.done[k] !== undefined; }), lines = found.map(function (k) { return D.done[k]; });
+    c.font = '12px ' + SCREEN_THEME.font; scText(c, 16, y + 38, scFit(c, 'FIND THE FAULT · ' + J.car.name + ': ' + symptomOf(J.car).says, w), '#f5b53d', 12);
+    if (D.wrong.length) lines.unshift('Not ' + D.wrong.map(function (f) { return faultById(f).short; }).join(', not ') + ': tried, and it still did it.');
+    if (!found.length) { var ck = checksFor(J); lines.push(ck.length ? 'Check: ' + ck.map(function (k) { return CHECKS[k].label.toLowerCase(); }).join('; ') + '.' : 'No check tells them apart: name it.'); }
+    var room = Math.max(1, Math.floor((h - 80) / 15));
+    lines.slice(-room).forEach(function (t, i) { c.font = '12px ' + SCREEN_THEME.font; scText(c, 16, y + 54 + i * 15, scFit(c, t, w), '#eef1f5', 12); });
+    var list = candList(J), n = list.length, bw = (w - (n - 1) * 6) / n, mine = !(J.assign && staffById(J.assign));
+    list.forEach(function (f, i) { scButton(sc, 16 + i * (bw + 6), y + h - 32, bw, 26, faultById(f).short, mine, function () { nameFault(b, f, 'player'); }); });
   }
   // ── The screen ────────────────────────────────────────────────────
   var PC_APPS = [['parts', 'Parts'], ['stock', 'Stock'], ['jobs', 'Jobs'], ['staff', 'Staff'], ['garage', 'Garage'], ['books', 'Books']];
@@ -8717,9 +9137,9 @@
       for (var b = 0; b < bayCount(); b++) (function (b) {
         var J = jobAt(b); if (!J) { rows.push({ text: 'Bay ' + (b + 1) + ': empty', sub: 'the next car is on its way' }); return; }
         var s = curStep(J), who = J.assign && staffById(J.assign);
-        rows.push({ text: 'Bay ' + (b + 1) + ': ' + J.car.name + "'s " + J.car.make + ' · ' + jobName(J), sub: (J.state === 'taken' ? 'step ' + (J.step + 1) + '/' + stepsOf(J).length + ': ' + (s ? s.label : '') : J.state) + (J.hold === 'parts' ? ' · WAITING ON PARTS: ' + missingParts(J).map(function (p) { return PARTS[p].name; }).join(', ') : '') + (J.due && J.state === 'taken' ? ' · promised ' + fmtTime(J.due) : '') + ' · ' + money(J.price),
+        rows.push({ text: 'Bay ' + (b + 1) + ': ' + J.car.name + "'s " + J.car.make + ' · ' + jobLabel(J), sub: (diagnosing(J) ? Object.keys(J.diag.done).length + ' check' + (Object.keys(J.diag.done).length === 1 ? '' : 's') + ' done; name it on the job card' : J.state === 'taken' ? 'step ' + (J.step + 1) + '/' + stepsOf(J).length + ': ' + (s ? s.label : '') : J.state) + (J.hold === 'parts' ? ' · WAITING ON PARTS: ' + missingParts(J).map(function (p) { return PARTS[p].name; }).join(', ') : '') + (J.due && J.state === 'taken' ? ' · promised ' + fmtTime(J.due) : '') + ' · ' + money(J.price),
           col: J.hold === 'parts' ? '#ff6b5e' : null,
-          btns: [J.state === 'taken' && staffList().some(function (w) { return canDo(w, J); }) ? { label: who ? who.name : 'Give to…', w: 96, act: function () { assignNext(b); } } : null, J.state === 'taken' && J.car.extra && !J.offered && customerIn(b) && !customerIn(b).walking ? { label: 'Offer extra', w: 96, act: function () { offerExtra(b); } } : null].filter(Boolean) });
+          btns: [J.state === 'taken' && staffList().some(function (w) { return canDo(w, J); }) ? { label: who ? who.name : 'Give to…', w: 96, act: function () { assignNext(b); } } : null, J.state === 'taken' && J.car.extra && !J.offered && !unnamed(J) && customerIn(b) && !customerIn(b).walking ? { label: 'Offer extra', w: 96, act: function () { offerExtra(b); } } : null].filter(Boolean) });
       })(b);
       rows.push({ head: true, text: 'Done (' + S.done.length + ')' });
       S.done.slice(0, 20).forEach(function (d) { rows.push({ text: 'Day ' + d.day + ' ' + d.t + ' · ' + d.name + ' · ' + d.job, sub: d.make + ' · ' + money(d.price) }); });
@@ -8737,6 +9157,7 @@
       var today = 0, out = 0; (S.ledger || []).forEach(function (l) { if (l.day === S.day) { if (l.n > 0) today += l.n; else out -= l.n; } });
       rows.push({ head: true, text: money(S.bank) + ' in the bank · today in ' + money(today) + ', out ' + money(out) });
       rows.push({ text: 'Rep ' + S.rep + ' of 100', sub: 'cars every ' + Math.round(47 * (1.3 - S.rep / 200)) + ' s or so · labour at ' + Math.round(labourMul() * 100) + '%' });
+      rows.push({ text: 'Diagnosis: ' + (S.stats.diagRight || 0) + ' right first time · ' + (S.stats.wrong || 0) + ' wrong', sub: 'a wrong name costs the part you fitted and the time' });
       var wages = 0; staffList().forEach(function (w) { wages += w.wage; }); rows.push({ text: 'Wages: ' + money(wages) + ' a day', sub: staffList().length + ' staff · paid at closing' });
       rows.push({ head: true, text: 'What the town says' });
       (S.repLog || []).slice(0, 12).forEach(function (r) { rows.push({ text: (r.n > 0 ? '+' : '') + r.n + ' · ' + r.why, sub: 'day ' + r.day + ' ' + r.t, col: r.n > 0 ? '#5fd38d' : '#ff6b5e' }); });
@@ -8857,7 +9278,8 @@
   function letGo(id) { var w = staffById(id); if (!w) return 'gone'; staffDrop(w); S.staff.splice(S.staff.indexOf(w), 1); jobList().forEach(function (J) { if (J.assign === id) J.assign = null; }); logEvent(w.name + ' has left the garage.', ''); screenDirtyAll(); return ''; }
   function train(id) { var w = staffById(id); if (!w) return 'gone'; if (w.skill >= 5) return 'already the best'; if (S.bank < TRAIN_PRICE) return money(TRAIN_PRICE); pay(-TRAIN_PRICE, 'a course for ' + w.name); w.skill = Math.min(5, Math.floor(w.skill) + 1); toast(w.name + ' did the course: skill ' + w.skill + '.', 'good'); screenDirtyAll(); return ''; }
   // give a job to someone, or take it back (null): the PC's Jobs app cycles through the ones who can do it
-  function canDo(w, J) { var R = ROLES[w.role]; if (R.desk) return false; return jobFaults(J).every(function (f) { return !R.jobs || R.jobs.indexOf(f) >= 0; }) && jobFaults(J).every(function (f) { var ff = faultById(f); return !ff.needs || owns(ff.needs); }); }
+  // a car whose fault is still being found is the mechanic's (the apprentice waits until it is named)
+  function canDo(w, J) { var R = ROLES[w.role]; if (R.desk) return false; if (unnamed(J)) return !R.jobs; return jobFaults(J).every(function (f) { return !R.jobs || R.jobs.indexOf(f) >= 0; }) && jobFaults(J).every(function (f) { var ff = faultById(f); return !ff.needs || owns(ff.needs); }); }
   function assignNext(b) {
     var J = jobAt(b); if (!J || J.state !== 'taken') return; var who = staffList().filter(function (w) { return canDo(w, J); }), i = J.assign ? who.map(function (w) { return w.id; }).indexOf(J.assign) : -1;
     J.assign = i + 1 < who.length ? who[i + 1].id : null; if (!J.assign) staffFree(b); screenDirtyAll();
@@ -8874,7 +9296,7 @@
     var o = LO(); if (ROLES[w.role].desk) { var d = propInst.desk ? propInst.desk.g.position : { x: DESK.x + o.x, z: DESK.z + o.z }; return { x: d.x + 1.3, z: d.z + 0.2 }; }
     var i = staffList().indexOf(w); return { x: o.x - 1.2 + i * 0.8, z: o.z + 1.4 };
   }
-  function staffPrompt(id) { var w = staffById(id), R = G.staff[id]; if (!w || !R) return ''; var J = R.task !== null && R.task !== undefined ? jobAt(R.task) : null, s = J ? curStep(J) : null; return w.name + ', ' + ROLES[w.role].name + ' (skill ' + Math.floor(w.skill) + ')' + (s ? ': ' + s.label.toLowerCase() : R.stocking ? ': putting the delivery away' : ': free') + (w.unpaid ? ' · unpaid ' + w.unpaid + ' day' + (w.unpaid > 1 ? 's' : '') : ''); }
+  function staffPrompt(id) { var w = staffById(id), R = G.staff[id]; if (!w || !R) return ''; var J = R.task !== null && R.task !== undefined ? jobAt(R.task) : null, s = J ? curStep(J) : null; return w.name + ', ' + ROLES[w.role].name + ' (skill ' + Math.floor(w.skill) + ')' + (diagnosing(J) ? ': finding the fault on the ' + J.car.make : s ? ': ' + s.label.toLowerCase() : R.stocking ? ': putting the delivery away' : ': free') + (w.unpaid ? ' · unpaid ' + w.unpaid + ' day' + (w.unpaid > 1 ? 's' : '') : ''); }
   function staffTalk(id) { var w = staffById(id), R = G.staff[id]; if (!w || !R) return; w.auto = !w.auto; say(R.g, w.auto ? 'I will pick up whatever needs doing.' : 'Right, I will wait until you give me a job.'); toast(w.name + (w.auto ? ' takes jobs on their own now.' : ' waits for you to hand them a job (PC, Jobs).'), ''); screenDirtyAll(); }
   // how long a worker takes over a step: skill 1 is slow, skill 5 quicker than you; unpaid staff drag their feet
   function staffMul(w) { return (1.6 - w.skill * 0.15) * (w.unpaid ? 1.4 : 1); }
@@ -8894,7 +9316,9 @@
         if (R.task === null && S.delivery && !staffList().some(function (x) { return ROLES[x.role].desk; })) { stockRun(w, R, dt); return; }
         if (R.task === null) { idle(w, R, dt); return; }
       }
-      var Jb = jobAt(R.task), s = curStep(Jb); if (!s) { R.task = null; return; }
+      var Jb = jobAt(R.task);
+      if (diagnosing(Jb)) { if (canDo(w, Jb)) staffDiag(w, R, dt); else { if (Jb.assign === w.id) Jb.assign = null; R.task = null; } return; }
+      var s = curStep(Jb); if (!s) { R.task = null; return; }
       var at = staffWhere(R.task, s); if (!at) { idle(w, R, dt); return; }
       if (dist2(R.rec.x, R.rec.z, at.x, at.z) > 0.8 * 0.8) { R.rec.path = route({ x: R.rec.x, z: R.rec.z }, at); if (!R.rec.path.length) { R.rec.x = at.x; R.rec.z = at.z; } R.t = 0; return; }
       var C = carIn(R.task); if (C) R.rec.yaw = Math.atan2(C.x - R.rec.x, C.z - R.rec.z);
@@ -8905,12 +9329,27 @@
         if (s.act === 'fetch' && !takeParts(R.task, s)) { say(R.g, 'We are out of ' + missingParts(Jb).map(function (p) { return PARTS[p].name; }).join(' and ') + '.'); if (w.auto) Jb.assign = null; R.task = null; screenDirtyAll(); return; }
         // the apprentice skips a step now and then: nobody sees it until the car comes back
         if (w.role === 'apprentice' && !Jb.sloppy && Math.random() < 0.02 * (4 - Math.min(3, w.skill))) Jb.sloppy = true;
-        var last = Jb.step + 1 >= stepsOf(Jb).length;
-        if (s.act === 'fetch') { stepFx(R.task, s.fx); Jb.step++; Jb.stepP = 0; Jb.hold = null; screenDirtyAll(); } else doStep(R.task, w.name);
-        if (last) { w.jobs++; w.skill = Math.min(5, w.skill + 0.2); Jb.assign = null; R.task = null; say(R.g, 'Done: ' + jobName(Jb) + '.'); }
+        var last = Jb.step + 1 >= stepsOf(Jb).length, named = Jb.diag && Jb.diag.named;
+        if (s.act === 'fetch') { stepFx(R.task, s.fx); Jb.step++; Jb.stepP = 0; Jb.hold = null; skipOpen(Jb); screenDirtyAll(); } else doStep(R.task, w.name);
+        // a wrong name sends the job back to finding the fault: the mechanic stays on it, the apprentice hands it back
+        if (last && Jb.state !== 'done') { say(R.g, 'It still does it. It was not the ' + faultById(named).short + '.'); if (!canDo(w, Jb)) { Jb.assign = null; R.task = null; } }
+        else if (last) { w.jobs++; w.skill = Math.min(5, w.skill + 0.2); Jb.assign = null; R.task = null; say(R.g, 'Done: ' + jobName(Jb) + '.'); }
         tyreWheelSync();
       }
     });
+  }
+  // the mechanic finding a fault: each check that still tells the answers apart, at its place on the car, then the name of what is left.
+  // A low-skill mechanic sometimes names one without checking (decided once a job: skill 1 two in five, skill 2 one in five)
+  function staffDiag(w, R, dt) {
+    var b = R.task, J = jobAt(b), D = J.diag;
+    if (D.rush === undefined) D.rush = Math.random() < Math.max(0, 0.2 * (3 - Math.floor(w.skill)));
+    var cons = consistent(J), cid = D.rush ? null : checksFor(J, cons)[0] || null;
+    if (!cid) { var f = pick(cons.length ? cons : candList(J)); say(R.g, 'It is the ' + faultById(f).short + '.'); nameFault(b, f, w.name); R.t = 0; return; }
+    var at = staffWhere(b, { at: CHECKS[cid].at }); if (!at) { idle(w, R, dt); return; }
+    if (dist2(R.rec.x, R.rec.z, at.x, at.z) > 0.8 * 0.8) { R.rec.path = route({ x: R.rec.x, z: R.rec.z }, at); if (!R.rec.path.length) { R.rec.x = at.x; R.rec.z = at.z; } R.t = 0; return; }
+    var C = carIn(b); if (C) R.rec.yaw = Math.atan2(C.x - R.rec.x, C.z - R.rec.z); R.g.rotation.y = R.rec.yaw; animateHuman(R.g, dt, 'work', 0, null, false);
+    var secs = CHECKS[cid].secs * staffMul(w); R.t += dt; D.p = Math.min(1, R.t / secs);
+    if (R.t >= secs) { R.t = 0; if (PLACES[CHECKS[cid].at].bay && !(J.vis && J.vis.open)) stepFx(b, 'open'); doCheck(b, cid, w.name); }
   }
   function idle(w, R, dt) { var p = staffPost(w); if (dist2(R.rec.x, R.rec.z, p.x, p.z) > 0.6 * 0.6) { R.rec.path = route({ x: R.rec.x, z: R.rec.z }, p); if (!R.rec.path.length) { R.rec.x = p.x; R.rec.z = p.z; } return; } animateHuman(R.g, dt, 'idle', 0, player ? { x: player.x, y: player.y + 1.6, z: player.z } : null, false); }
   // putting the delivery away: walk to the pallet, then it goes on the shelves
@@ -8938,15 +9377,12 @@
   function stockCap() { return 24 + (owns('shed') ? 40 : 0) + (grown() ? 60 : 0); }
   function stockLine() { var a = []; Object.keys(PARTS).forEach(function (p) { if (S.stock[p]) a.push(S.stock[p] + ' ' + PARTS[p].name); }); return a.length ? a.join(', ') : 'empty'; }
   function onOrder(p) { var n = 0; (S.orders || []).forEach(function (o) { if (o.part === p) n += o.n; }); if (S.delivery) n += S.delivery.parts[p] || 0; return n; }
-  var _boxGeo = null, _boxMats = {};
-  function stockMat(p) { return _boxMats[p] || (_boxMats[p] = std({ color: PARTS[p].col, roughness: 0.8 })); }
-  // the boxes: the rack first, then the shed, then the parts store
+  // the parts on the shelves, each in its own look (02-car.js, gcPartMesh): the rack first, then the shed, then the parts store
   function stockDraw() {
     var units = []; Object.keys(PARTS).forEach(function (p) { for (var i = 0; i < (S.stock && S.stock[p] || 0); i++) units.push(p); });
-    _boxGeo = _boxGeo || boxGeo(0.2, 0.16, 0.26);
     var fill = function (grp, shelves, per, x0, dx, n0, dz) {
       if (!grp) return n0; while (grp.children.length) grp.remove(grp.children[0]);
-      var n = n0; for (var s = 0; s < shelves.length; s++) for (var k = 0; k < per; k++) { if (n >= units.length) return n; var m = new THREE.Mesh(_boxGeo, stockMat(units[n])); m.position.set(x0 + k * dx, shelves[s] + 0.1, dz || 0); m.castShadow = true; grp.add(m); n++; }
+      var n = n0; for (var s = 0; s < shelves.length; s++) for (var k = 0; k < per; k++) { if (n >= units.length) return n; var m = gcPartMesh(units[n]); m.position.set(x0 + k * dx, shelves[s] + 0.02, dz || 0); grp.add(m); n++; }
       return n;
     };
     var n = fill(G.rackBoxes, [0.42, 1.02, 1.62], 8, -0.8, 0.228, 0);
@@ -8983,7 +9419,7 @@
   function dropSpot() { var o = LO(); return { x: o.x - 2.4, z: o.z + LOCKUP.z + 1.6 }; }
   function vanCome() {
     var load = S.orders.filter(dueNow); S.orders = S.orders.filter(function (o) { return !dueNow(o); });
-    var g = carMesh({ col: 0xf3efe4, plate: 'PARTS' }); g.userData.dynamic = true; box(2.6, 0.9, 1.7, std({ color: 0xf3efe4, roughness: 0.6 }), -0.7, 1.75, 0, g); sign(['PARTS VAN'], 1.6, 0.4, -0.7, 1.75, 0.86, 0, { bg: '#1b232c' }, g); scene.add(g);
+    var g = gcCar({ col: 0xf3efe4, plate: 'PARTS', van: true }); g.userData.dynamic = true; scene.add(g);
     var d = dropSpot(); G.van = { g: g, x: -78, z: ROAD_Z + LANE, yaw: 0, speed: 0, load: load, wait: 0, path: [[ENTRY_X, ROAD_Z + LANE, 9], [ENTRY_X, APRON_Z - 4, 3.5], [d.x + 1.2, d.z + 4.5, 3]] };
     g.position.set(G.van.x, 0, G.van.z); logEvent('The parts van is on its way in.', '');
   }
@@ -8997,7 +9433,7 @@
   function pileBuild() {
     if (G.pile) { var k = inter.indexOf(G.pileHit); if (k >= 0) inter.splice(k, 1); scene.remove(G.pile); G.pile = null; }
     if (!S.delivery) return; var d = dropSpot(), g = new THREE.Group(); g.userData.dynamic = true; g.position.set(d.x, 0, d.z); scene.add(g); G.pile = g;
-    box(1.0, 0.12, 0.8, MAT.wood, 0, 0.06, 0, g); var i = 0; for (var p in S.delivery.parts) for (var k2 = 0; k2 < Math.min(6, S.delivery.parts[p]); k2++, i++) { var m = box(0.2, 0.16, 0.26, stockMat(p), -0.35 + (i % 4) * 0.23, 0.2 + Math.floor(i / 8) * 0.17, -0.25 + (Math.floor(i / 4) % 2) * 0.4, g); }
+    box(1.0, 0.12, 0.8, MAT.wood, 0, 0.06, 0, g); var i = 0; for (var p in S.delivery.parts) for (var k2 = 0; k2 < Math.min(6, S.delivery.parts[p]); k2++, i++) { var m = gcPartMesh(p); m.position.set(-0.35 + (i % 4) * 0.23, 0.12 + Math.floor(i / 8) * 0.25, -0.2 + (Math.floor(i / 4) % 2) * 0.4); g.add(m); }
     G.pileHit = hitBox(1.1, 0.8, 0.9, 0, 0.4, 0, { prompt: function () { return 'Put the delivery on the shelves: ' + pileLine(); }, use: function () { putAway('player'); } }, g);
   }
   function putAway(by) {
@@ -9015,14 +9451,16 @@
     if (any) { var err = orderParts(basket, false); if (err) logEvent('The supplier account could not reorder: ' + err, 'bad'); else logEvent('The supplier account reordered to your minimums.', ''); }
   }
   // ── Tools ─────────────────────────────────────────────────────────
-  // the hand tools on the tool wall. The plug socket is bought on the PC; the rest come with the lock-up
+  // the hand tools on the tool wall. The plug socket is bought on the PC; the rest come with the lock-up. The code reader finds faults
+  // (the checks, below): it reads the codes from the socket under the dash and tests the battery
   var TOOLS = {
     spanner: { name: 'spanner', len: 0.32, headW: 0.1 },
     brace: { name: 'wheel brace', len: 0.46, headW: 0.16 },
     filterwrench: { name: 'filter wrench', len: 0.28, headW: 0.14 },
-    socket: { name: 'spark plug socket', len: 0.3, headW: 0.06 }
+    socket: { name: 'spark plug socket', len: 0.3, headW: 0.06 },
+    reader: { name: 'code reader', len: 0.2, headW: 0.14, mat: MAT.yellow }
   };
-  var TOOL_IDS = ['spanner', 'brace', 'filterwrench', 'socket'];
+  var TOOL_IDS = ['spanner', 'brace', 'filterwrench', 'socket', 'reader'];
   function toolOwned(t) { return !!(S.tools && S.tools[t]); }
   function toolPrompt(t) {
     if (!toolOwned(t)) return t === 'socket' ? 'An empty hook: the spark plug socket is on the PC (Garage)' : '';
@@ -9045,11 +9483,12 @@
     plugs: { p: [1.6, 1.08, 0], s: [0.5, 0.2, 0.5], name: 'the spark plugs', bay: true },
     lamp: { p: [1.98, 0.84, 0.62], s: [0.24, 0.24, 0.36], name: 'the back of the headlight', bay: true },
     wipers: { p: [0.95, 1.24, 0.2], s: [0.4, 0.3, 1.4], name: 'the windscreen' },
-    sump: { p: [1.3, 0.24, 0.85], s: [0.5, 0.3, 0.45], name: 'the sump plug, under the front' },
-    filter: { p: [0.85, 0.26, 0.85], s: [0.4, 0.3, 0.45], name: 'the oil filter, under the engine' },
+    sump: { p: [1.06, 0.24, 0.85], s: [0.3, 0.3, 0.45], name: 'the sump plug, under the front' },
+    filter: { p: [0.72, 0.26, 0.85], s: [0.3, 0.3, 0.45], name: 'the oil filter, under the engine' },
     wheel: { p: [1.4, 0.36, 0.98], s: [0.8, 0.8, 0.3], name: 'the front wheel' },
     hub: { p: [1.4, 0.36, 0.98], s: [0.8, 0.8, 0.3], name: 'the hub' },
     exhaust: { p: [-1.4, 0.26, 0.75], s: [1.0, 0.3, 0.4], name: 'the exhaust' },
+    obd: { p: [0.45, 0.78, 0.98], s: [0.6, 0.44, 0.24], name: 'the reader socket, under the dash' },
     rack: { name: 'the parts rack' },
     lift: { name: 'the lift control box' },
     tyre: { name: 'the tyre corner' }
@@ -9058,27 +9497,29 @@
   // ── The steps of each job ─────────────────────────────────────────
   // [place, action, seconds, tool, what it says, what it does to the car]. Actions: fetch (E at the parts rack or a store: takes the
   // job's parts), press (once), hold (hold E while it fills), fill (hold E and let go at the full mark), wheel (press, with the
-  // wheel in your hands). Workers do the same steps at their own pace
+  // wheel in your hands). The seventh field names what the step moves on the car while it fills (02-car.js, gcCarAnimate). Workers do
+  // the same steps at their own pace
   var JACK_UP = ['jack', 'hold', 2.5, null, 'Jack the car up', 'up'], LOWER = ['jack', 'hold', 2, null, 'Lower the car', 'down'];
   var OPEN = ['bonnet', 'press', 0, null, 'Open the bonnet', 'open'], SHUT = ['bonnet', 'press', 0, null, 'Shut the bonnet', 'shut'];
-  var NUTS_OFF = ['wheel', 'hold', 2.5, 'brace', 'Undo the wheel nuts'], WHEEL_OFF = ['wheel', 'press', 0, null, 'Take the wheel off', 'wheeloff'];
-  var WHEEL_ON = ['hub', 'wheel', 0, null, 'Put the wheel back on', 'wheelon'], NUTS_ON = ['wheel', 'hold', 2, 'brace', 'Do the wheel nuts up'];
+  var NUTS_OFF = ['wheel', 'hold', 2.5, 'brace', 'Undo the wheel nuts', null, 'nutsoff'], WHEEL_OFF = ['wheel', 'press', 0, null, 'Take the wheel off', 'wheeloff'];
+  var WHEEL_ON = ['hub', 'wheel', 0, null, 'Put the wheel back on', 'wheelon'], NUTS_ON = ['wheel', 'hold', 2, 'brace', 'Do the wheel nuts up', null, 'nutson'];
   function fetchStep(what) { return ['rack', 'fetch', 1.5, null, 'Take ' + what + ' from the rack']; }
   var STEPS = {
-    oil: [fetchStep('the oil and a filter'), JACK_UP, ['sump', 'hold', 2, 'spanner', 'Undo the sump plug', 'pan'], ['sump', 'hold', 3, null, 'Let the old oil drain into the pan'], ['filter', 'hold', 2.5, 'filterwrench', 'Swap the oil filter'], ['sump', 'hold', 1.5, 'spanner', 'Put the sump plug back in', 'nopan'], LOWER, OPEN, ['cap', 'fill', 3, null, 'Fill it with fresh oil: let go at the full mark'], SHUT],
-    brakes: [fetchStep('a pad set'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 4, 'spanner', 'Swap the brake pads'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER],
-    bulb: [fetchStep('a bulb'), OPEN, ['lamp', 'hold', 2, null, 'Swap the headlight bulb', 'lampon'], SHUT],
-    battery: [fetchStep('a battery'), OPEN, ['battery', 'hold', 2, 'spanner', 'Undo the battery clamp'], ['battery', 'hold', 2, null, 'Lift the old battery out and drop the new one in'], SHUT],
-    wipers: [fetchStep('a pair of wiper blades'), ['wipers', 'hold', 2, null, 'Swap the wiper blades']],
+    oil: [fetchStep('the oil and a filter'), JACK_UP, ['sump', 'hold', 2, 'spanner', 'Undo the sump plug', 'pan', 'plugout'], ['sump', 'hold', 3, null, 'Let the old oil drain into the pan', null, 'drain'], ['filter', 'hold', 2.5, 'filterwrench', 'Swap the oil filter', null, 'filter'], ['sump', 'hold', 1.5, 'spanner', 'Put the sump plug back in', 'nopan', 'plugin'], LOWER, OPEN, ['cap', 'fill', 3, null, 'Fill it with fresh oil: let go at the full mark', null, 'oilfill'], SHUT],
+    brakes: [fetchStep('a pad set'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 4, 'spanner', 'Swap the brake pads', null, 'pads'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER],
+    bulb: [fetchStep('a bulb'), OPEN, ['lamp', 'hold', 2, null, 'Swap the headlight bulb', 'lampon', 'bulb'], SHUT],
+    battery: [fetchStep('a battery'), OPEN, ['battery', 'hold', 2, 'spanner', 'Undo the battery clamp', null, 'clamp'], ['battery', 'hold', 2, null, 'Lift the old battery out and drop the new one in', null, 'battery'], SHUT],
+    terminal: [OPEN, ['battery', 'hold', 2, 'spanner', 'Clean the terminal and do it up tight', null, 'terminal'], SHUT],
+    wipers: [fetchStep('a pair of wiper blades'), ['wipers', 'hold', 2, null, 'Swap the wiper blades', null, 'wipers']],
     puncture: [fetchStep('a plug kit'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['tyre', 'hold', 3, null, 'Turn the wheel in the water tank until the bubbles show the hole'], ['tyre', 'hold', 2, null, 'Plug the hole'], ['tyre', 'hold', 2, null, 'Pump it up on the air line'], WHEEL_ON, NUTS_ON, LOWER],
-    airfilter: [fetchStep('an air filter'), OPEN, ['airbox', 'hold', 2.5, null, 'Swap the air filter'], SHUT],
-    plugs: [fetchStep('a set of spark plugs'), OPEN, ['plugs', 'hold', 4, 'socket', 'Swap the spark plugs'], SHUT],
-    coolant: [fetchStep('the coolant'), OPEN, ['coolant', 'fill', 2.5, null, 'Top up the coolant: let go at the full mark'], SHUT],
+    airfilter: [fetchStep('an air filter'), OPEN, ['airbox', 'hold', 2.5, null, 'Swap the air filter', null, 'airfilter'], SHUT],
+    plugs: [fetchStep('a set of spark plugs'), OPEN, ['plugs', 'hold', 4, 'socket', 'Swap the spark plugs', null, 'plugs'], SHUT],
+    coolant: [fetchStep('the coolant'), OPEN, ['coolant', 'fill', 2.5, null, 'Top up the coolant: let go at the full mark', null, 'coolant'], SHUT],
     newtyre: [fetchStep('a tyre'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['tyre', 'hold', 4, null, 'Swap the tyre on the tyre machine'], ['tyre', 'hold', 2, null, 'Balance the wheel'], WHEEL_ON, NUTS_ON, LOWER],
-    exhaust: [fetchStep('an exhaust section'), JACK_UP, ['exhaust', 'hold', 3, 'spanner', 'Unbolt the old exhaust section'], ['exhaust', 'hold', 3, 'spanner', 'Bolt the new section on'], LOWER],
-    discs: [fetchStep('the discs and pads'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 5, 'spanner', 'Swap the discs and pads'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER]
+    exhaust: [fetchStep('an exhaust section'), JACK_UP, ['exhaust', 'hold', 3, 'spanner', 'Unbolt the old exhaust section', null, 'exhoff'], ['exhaust', 'hold', 3, 'spanner', 'Bolt the new section on', null, 'exhon'], LOWER],
+    discs: [fetchStep('the discs and pads'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 5, 'spanner', 'Swap the discs and pads', null, 'discs'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER]
   };
-  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, fault: fid }; }
+  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, anim: a[6] || null, fault: fid }; }
   // a job's steps: each fault's in turn (a second fault the customer said yes to comes after the first)
   function stepsOf(J) { var out = []; jobFaults(J).forEach(function (fid) { (STEPS[fid] || []).forEach(function (a) { out.push(liftStep(J, mkStep(a, fid))); }); }); return out; }
   function curStep(J) { if (!J || J.state !== 'taken') return null; return stepsOf(J)[J.step] || null; }
@@ -9091,36 +9532,125 @@
   }
   function partsCovered(J) { var miss = missingParts(J); return miss.every(function (p) { return onOrder(p) > 0; }); }
 
+  // ── Finding the fault ─────────────────────────────────────────────
+  // a job whose symptom could be more than one open fault starts as "find the fault": J.diag.named is null and J.faults is empty, so it
+  // has no steps yet. A check is a hold of E at a place on the car and finds a line of words for each fault (ok for every fault it
+  // says nothing about); only the checks that would tell the answers on the card apart are offered. You read the findings and name the
+  // fault on the job card. A wrong name is found out when the car is started at the end, and costs the part and the time
+  var CHECKS = {
+    codes: { at: 'obd', tool: 'reader', secs: 2, label: 'Plug the reader in and read the codes', ok: 'No fault codes stored.', finds: { plugs: 'P0300: a random misfire.', airfilter: 'P0101: the air flow reads low.' } },
+    battery: { at: 'battery', tool: 'reader', secs: 1.5, label: 'Test the battery with the reader', ok: '12.6 volts: the battery is healthy and the terminals are tight.', finds: { battery: '11.4 volts and falling: the battery is worn out.', terminal: '12.6 volts, but the negative terminal is furred up and moves on its post.' } },
+    airbox: { at: 'airbox', tool: null, secs: 1.5, label: 'Open the air box and look at the filter', ok: 'The air filter is clean.', finds: { airfilter: 'The air filter is black and clogged.' } },
+    brake: { at: 'wheel', tool: null, secs: 1.5, label: 'Look at the brake through the wheel', ok: 'Plenty of pad left and the disc is smooth.', finds: { brakes: 'The pads are worn thin; the disc is smooth.', discs: 'The pads are down to the metal and the disc is deeply scored.' } },
+    tyre: { at: 'wheel', tool: null, secs: 1.5, label: 'Look over the tyre', ok: 'The tyre is sound.', finds: { puncture: 'A screw in the tread, and plenty of tread left.', newtyre: 'Worn down to the cord across the tread.' } }
+  };
+  var CHECK_IDS = ['codes', 'battery', 'airbox', 'brake', 'tyre'];
+  function finding(cid, fid) { var K = CHECKS[cid]; return (K.finds && K.finds[fid]) || K.ok; }
+  // the answers a car's symptom can be at your level (the true fault is always one of them); a comeback is known already
+  function diagStart(car, known) {
+    var c = known ? [car.fault] : symptomOf(car).faults.filter(function (f) { var F = faultById(f); return F.id === f && F.lvl <= S.level; });
+    if (c.indexOf(car.fault) < 0) c.push(car.fault);
+    return { cands: c, done: {}, wrong: [], named: c.length === 1 ? c[0] : null, checks: 0, p: 0 };
+  }
+  function unnamed(J) { return !!(J && J.diag && !J.diag.named); }
+  function diagnosing(J) { return !!(J && J.state === 'taken' && unnamed(J)); }
+  // the answers still on the card (a wrong name is crossed off), and those the findings so far agree with (the mechanic goes by these)
+  function candList(J) { var D = J.diag; return D.cands.filter(function (f) { return D.wrong.indexOf(f) < 0; }); }
+  function consistent(J) { var D = J.diag; return candList(J).filter(function (f) { for (var c in D.done) if (finding(c, f) !== D.done[c]) return false; return true; }); }
+  function shortList(list) { var a = list.map(function (f) { return faultById(f).short; }); return a.length > 1 ? a.slice(0, -1).join(', ') + ' or ' + a[a.length - 1] : a.join(''); }
+  // the checks worth doing: not done yet, and finding different things across the answers given
+  function checksFor(J, among) {
+    var set = among || candList(J), D = J.diag;
+    return CHECK_IDS.filter(function (cid) { if (D.done[cid] !== undefined) return false; if (CHECKS[cid].tool && !toolOwned(CHECKS[cid].tool)) return false; var seen = {}; set.forEach(function (f) { seen[finding(cid, f)] = 1; }); return Object.keys(seen).length > 1; });
+  }
+  function checkAt(J, at) { return checksFor(J).filter(function (cid) { return CHECKS[cid].at === at; })[0] || null; }
+  function checkBlock(b, cid) {
+    var J = jobAt(b), K = CHECKS[cid];
+    if (J.assign && staffById(J.assign)) return staffById(J.assign).name + ' is on this car';
+    if (PLACES[K.at] && PLACES[K.at].bay && !(J.vis && J.vis.open)) return 'open the bonnet first';
+    if (K.tool && S.tool !== K.tool) return 'you need the ' + TOOLS[K.tool].name + ': take it off the tool wall';
+    return null;
+  }
+  function doCheck(b, cid, by) {
+    var J = jobAt(b); if (!diagnosing(J) || J.diag.done[cid] !== undefined) return null;
+    var f = finding(cid, J.car.fault); J.diag.done[cid] = f; J.diag.checks++; J.diag.p = 0; sfx('beep');
+    toast((by && by !== 'player' ? by + ': ' : '') + f, ''); logEvent(J.car.name + "'s " + J.car.make + ': ' + f, '');
+    screenDirtyAll(); hudDirty = true; return f;
+  }
+  // naming the fault prices the job and its steps begin. A bonnet opened for the checks stays open for a job that works under it,
+  // and is shut for one that does not
+  function nameFault(b, fid, by) {
+    var J = jobAt(b); if (!diagnosing(J)) return 'nothing to name'; if (candList(J).indexOf(fid) < 0) return 'not one of the answers';
+    var D = J.diag; D.named = fid; D.namedAfter = D.checks; J.faults = [fid]; J.step = 0; J.stepP = 0; J.hold = null; if (G.hold && G.hold.bay === b) G.hold = null;
+    var pr = priceFor(jobFaults(J)); J.price = J.comeback ? 0 : pr.total; J.parts = J.comeback ? 0 : pr.parts;
+    if (J.vis && J.vis.open && !stepsOf(J).some(function (s) { return s.fx === 'open'; })) stepFx(b, 'shut');
+    skipOpen(J); sfx('ok');
+    toast((by && by !== 'player' ? by + ' says it is ' : 'Job card, bay ' + (b + 1) + ': ') + faultById(fid).job + ' for ' + money(J.price) + '.', 'good');
+    logEvent((by && by !== 'player' ? by + ' named' : 'Named') + ' the fault on ' + J.car.name + "'s " + J.car.make + ': ' + faultById(fid).job + '.', '');
+    screenDirtyAll(); hudDirty = true; return '';
+  }
+  // an Open the bonnet step with the bonnet already up is done already
+  function skipOpen(J) { var s = curStep(J); while (s && s.fx === 'open' && J.vis && J.vis.open) { J.step++; s = curStep(J); } }
+  // the last step done on a wrong name: started up, the car still does it. The part fitted is lost (the invoice never carries it), the
+  // name is crossed off and the job goes back to finding the fault; with one answer left, it is named for you
+  function wrongFix(b, by) {
+    var J = jobAt(b), D = J.diag, F = faultById(D.named), lost = 0, names = [];
+    (F.parts || []).forEach(function (p) { if (PARTS[p]) { lost += PARTS[p].cost; names.push(PARTS[p].name); } });
+    D.wrong.push(D.named); D.named = null; J.doneExtra = (J.doneExtra || []).concat(J.faults.slice(1)); J.faults = []; J.step = 0; J.stepP = 0; J.hold = null; J.vis = {}; carVis(b);
+    var pr = priceFor(jobFaults(J)); J.price = J.comeback ? 0 : pr.total; J.parts = J.comeback ? 0 : pr.parts;
+    S.stats.wrong = (S.stats.wrong || 0) + 1; sfx('bad');
+    toast('Started it up, and it still does it: it was not ' + F.job + '.' + (lost ? ' The ' + names.join(' and ') + ' cost ' + money(lost) + ', and the customer will not pay for ' + (names.length > 1 ? 'them' : 'it') + '.' : ''), 'bad');
+    logEvent('Wrong: ' + J.car.name + "'s " + J.car.make + ' did not need ' + F.job + (by && by !== 'player' && by !== 'dev' ? ' (' + by + ')' : '') + '.' + (lost ? ' ' + money(lost) + ' of parts wasted.' : ''), 'bad');
+    var left = candList(J); if (left.length === 1) nameFault(b, left[0], 'player');
+    screenDirtyAll(); hudDirty = true;
+  }
+  // right first time after at least one check: a little XP, and the books count it
+  function diagRight(J) {
+    var D = J.diag; if (!D || D.cands.length < 2 || D.wrong.length || !D.namedAfter) return;
+    S.stats.diagRight = (S.stats.diagRight || 0) + 1; addXp(5); logEvent('Right first time on ' + J.car.name + "'s " + J.car.make + '.', 'good');
+  }
+  // holding E at a check: it fills while you stay at the car
+  function checkTick(H, dt) {
+    var J = jobAt(H.bay); if (!diagnosing(J) || J.diag.done[H.check] !== undefined) { G.hold = null; return; }
+    if (!player.keys.KeyE || !nearCar(H.bay, 3.4)) { G.hold = null; J.diag.p = 0; screenDirtyAll(); return; }
+    J.diag.p += dt / CHECKS[H.check].secs;
+    if (worldTime - (G.lastClank || 0) > 0.9) { G.lastClank = worldTime; sfx('click'); }
+    if (J.diag.p >= 1) { G.hold = null; doCheck(H.bay, H.check, 'player'); }
+    hudDirty = true;
+  }
+  // a place on the car while the fault is being found: the bonnet opens freely, the other places offer their check. The open bonnet's
+  // box covers the engine bay, so it offers to shut only once no check is left under it (naming the fault shuts it when the job needs)
+  function bayCheckLeft(J) { return checksFor(J).some(function (cid) { return PLACES[CHECKS[cid].at].bay; }); }
+  function diagPrompt(b, at) {
+    var J = jobAt(b); if (J.assign && staffById(J.assign)) return '';
+    if (at === 'bonnet') return J.vis && J.vis.open ? (bayCheckLeft(J) ? '' : 'Shut the bonnet') : 'Open the bonnet';
+    var cid = checkAt(J, at); if (!cid) return '';
+    var why = checkBlock(b, cid); if (why) return CHECKS[cid].label + ': ' + why;
+    return 'Hold E: ' + CHECKS[cid].label + (G.hold && G.hold.check === cid && J.diag.p > 0 ? ' · ' + Math.round(J.diag.p * 100) + '%' : '');
+  }
+  function diagUse(b, at) {
+    var J = jobAt(b); if (J.assign && staffById(J.assign)) return;
+    if (at === 'bonnet') { if (J.vis && J.vis.open && bayCheckLeft(J)) return; J.by = 'player'; stepFx(b, J.vis && J.vis.open ? 'shut' : 'open'); sfx('door'); screenDirtyAll(); return; }
+    var cid = checkAt(J, at); if (!cid) return;
+    var why = checkBlock(b, cid); if (why) { toast(CHECKS[cid].label + ': ' + why + '.', 'bad'); return; }
+    J.by = 'player'; J.diag.p = 0; G.hold = { bay: b, check: cid, at: at };
+  }
+  // what the job card, the clipboard and the prompts call a job: its name, or what it could be while the fault is being found
+  function jobLabel(J) { return unnamed(J) ? 'find the fault (' + shortList(candList(J)) + ')' : jobName(J); }
+
   // ── The car's moving parts ────────────────────────────────────────
-  // the engine's car is one body; the bonnet's bump is swapped for an engine bay with a lid on a hinge, and each place gets its box
+  // the car (02-car.js) carries its own engine bay, bonnet, jack, drain pan and every part a job moves; here each place on it gets the
+  // box you look at
   function carParts(b, C) {
-    var g = C.g, paint = g.userData.paint, bump = g.children[2]; if (bump) bump.visible = false;
-    var bay = new THREE.Group(); bay.userData.dynamic = true; g.add(bay); C.bayParts = bay;
-    box(1.0, 0.28, 0.04, paint, 1.6, 0.9, 0.78, bay); box(1.0, 0.28, 0.04, paint, 1.6, 0.9, -0.78, bay); box(0.04, 0.28, 1.6, paint, 2.08, 0.9, 0, bay); box(0.04, 0.2, 1.6, MAT.black, 1.12, 0.96, 0, bay);
-    box(0.95, 0.04, 1.5, MAT.black, 1.6, 0.8, 0, bay); box(0.55, 0.24, 0.7, MAT.steelDark, 1.55, 0.94, 0, bay);
-    cyl(0.04, 0.04, MAT.yellow, PLACES.cap.p[0], 1.08, PLACES.cap.p[2], bay, 10); box(0.02, 0.1, 0.02, MAT.yellow, 1.75, 1.08, -0.18, bay);
-    C.battery = box(0.3, 0.2, 0.22, MAT.black, PLACES.battery.p[0], 0.98, PLACES.battery.p[2], bay); box(0.34, 0.14, 0.28, MAT.steelDark, PLACES.airbox.p[0], 0.98, PLACES.airbox.p[2], bay);
-    box(0.14, 0.16, 0.14, std({ color: 0xe8f4f0, roughness: 0.3, transparent: true, opacity: 0.8 }), PLACES.coolant.p[0], 0.98, PLACES.coolant.p[2], bay);
-    // the lid: hinged at the windscreen end, it lifts at the front
-    C.lid = new THREE.Group(); C.lid.position.set(1.1, 1.05, 0); g.add(C.lid); C.lid.userData.dynamic = true;
-    box(1.04, 0.04, 1.64, paint, 0.52, 0, 0, C.lid);
-    // the jack under the sill, the drain pan under the sump, both on the floor (they stay down while the car goes up)
-    C.jackMesh = new THREE.Group(); C.jackMesh.visible = false; g.add(C.jackMesh); box(0.24, 0.1, 0.6, std({ color: 0xc8342a, roughness: 0.45, metalness: 0.3 }), 0, 0.05, 0, C.jackMesh); cyl(0.05, 0.22, MAT.steel, 0, 0.2, 0, C.jackMesh, 10); C.jackMesh.position.set(PLACES.jack.p[0], 0, 0.75);
-    C.pan = box(0.6, 0.1, 0.5, MAT.black, PLACES.sump.p[0], 0.05, 0.55, g); C.pan.visible = false;
+    var g = C.g, P = g.userData.parts; C.parts = P; C.lid = P.lid; C.jackMesh = P.jack; C.pan = P.pan; C.battery = P.battery;
     C.looseWheel = g.userData.wheels && g.userData.wheels[0];
     C.places = {};
     Object.keys(PLACES).forEach(function (at) { var P = PLACES[at]; if (!P.p) return; var m = hitBox(P.s[0], P.s[1], P.s[2], P.p[0], P.p[1], P.p[2], { gc: { bay: b, at: at }, prompt: function () { return placePrompt(b, at); }, use: function () { placeUse(b, at); } }, g); C.places[at] = m; });
   }
-  // what the car looks like now: lid, jack, pan, wheel. J.vis is the save's copy so a reload puts it back as it was
-  function carVis(b) {
-    var C = carIn(b), J = jobAt(b); if (!C || !J) return; var v = J.vis || {};
-    var h = carHeight(b), onLift = J.lift !== null && J.lift !== undefined;
-    C.lid.rotation.z = v.open ? 1.05 : 0; C.g.position.y = h; C.jackMesh.visible = !!v.up && !onLift; C.jackMesh.position.y = -h;
-    C.pan.visible = !!v.pan; C.pan.position.y = 0.05 - h;
-    if (C.looseWheel) C.looseWheel.visible = !v.wheelOff;
-    shadowDirty = true;
-  }
-  function workRestore(b) { carVis(b); }
+  // what the car looks like now: its height, the jack and the pan at once, and the moving parts on their way (gcCarAnimate eases them
+  // every tick). J.vis is the save's copy, so a reload puts it all back as it was, at once
+  function carVis(b) { gcCarAnimate(b, 0, false); shadowDirty = true; }
+  function workRestore(b) { gcCarAnimate(b, 0, true); shadowDirty = true; }
   function stepFx(b, fx) {
     var J = jobAt(b); if (!J || !fx) return; var v = J.vis || (J.vis = {});
     if (fx === 'up') v.up = true; else if (fx === 'down') v.up = false; else if (fx === 'open') v.open = true; else if (fx === 'shut') v.open = false;
@@ -9141,7 +9671,8 @@
   }
   function verb(s) { return s.act === 'hold' || s.act === 'fill' ? 'Hold E: ' : ''; }
   function placePrompt(b, at) {
-    var J = jobAt(b), s = curStep(J); if (!s || s.at !== at) return '';
+    var J = jobAt(b); if (diagnosing(J)) return diagPrompt(b, at);
+    var s = curStep(J); if (!s || s.at !== at) return '';
     if (s.act === 'fetch') return '';
     var why = stepBlock(b, s); if (why) return s.label + ': ' + why;
     if (s.act === 'fill') return verb(s) + s.label + ' · ' + fillText(J);
@@ -9149,7 +9680,8 @@
   }
   function fillText(J) { var p = J.stepP || 0; return p < 0.9 ? 'level ' + Math.round(p * 100) + '%' : p <= 1.1 ? 'at the mark: let go' : 'over the mark: ' + Math.round(p * 100) + '%'; }
   function placeUse(b, at) {
-    var J = jobAt(b), s = curStep(J); if (!s || s.at !== at) return;
+    var J = jobAt(b); if (diagnosing(J)) { diagUse(b, at); return; }
+    var s = curStep(J); if (!s || s.at !== at) return;
     var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; }
     J.by = 'player';
     if (s.act === 'press' || s.act === 'wheel') { if (s.act === 'wheel' && S.hand && S.hand.kind === 'wheel') S.hand = null; doStep(b, 'player'); return; }
@@ -9159,6 +9691,7 @@
   // keep holding: let go between 90 and 110 percent, or let a little out (hold again) and try once more
   function workTick(dt) {
     var H = G.hold; if (!H) return;
+    if (H.check) { checkTick(H, dt); return; }
     var J = jobAt(H.bay), s = curStep(J);
     if (!s || J.step !== H.step) { G.hold = null; return; }
     var here = s.at === 'tyre' ? nearTyre(3.2) : nearCar(H.bay, 3.4);
@@ -9182,8 +9715,9 @@
     stepFx(b, s.fx);
     if (s.fx === 'wheeloff' && by === 'player' && stepsOf(J).slice(J.step + 1).some(function (x) { return x.at === 'tyre'; })) S.hand = { kind: 'wheel', bay: b, label: J.car.name + "'s wheel" };
     J.step++; J.stepP = 0; J.over = false; J.hold = null; addXp(1);
-    if (J.step >= stepsOf(J).length) jobFinished(b, by);
-    else { var n = curStep(J); if (by === 'player' && n) toast('Next: ' + n.label + ' (' + placeName(n.at) + ').', ''); }
+    // the last step: start it up. A wrong name shows now (finding the fault, above)
+    if (J.step >= stepsOf(J).length) { if (J.diag && J.diag.named && J.diag.named !== J.car.fault) wrongFix(b, by); else { diagRight(J); jobFinished(b, by); } }
+    else { skipOpen(J); var n = curStep(J); if (by === 'player' && n) toast('Next: ' + n.label + ' (' + placeName(n.at) + ').', ''); }
     screenDirtyAll(); hudDirty = true; return true;
   }
   // the parts for a fetch step come off the shelves; short of one, the job waits on it (the card and the PC say what)
@@ -9232,7 +9766,7 @@
   function jobChip() {
     var b = 0, best = 1e9; for (var i = 0; i < bayCount(); i++) { var C = carIn(i); if (C && jobAt(i)) { var d = dist2(player.x, player.z, C.x, C.z); if (d < best) { best = d; b = i; } } }
     var J = jobAt(b); if (!J) return 'no car in';
-    var s = curStep(J); return (bayCount() > 1 ? 'bay ' + (b + 1) + ': ' : '') + ({ coming: 'car on its way', waiting: 'customer at the desk', done: 'fixed, take the money', paid: 'paid', leaving: 'leaving' }[J.state] || (s ? (J.hold === 'parts' ? 'waiting on parts' : s.label.toLowerCase()) : J.state));
+    var s = curStep(J); if (diagnosing(J)) return (bayCount() > 1 ? 'bay ' + (b + 1) + ': ' : '') + 'find the fault'; return (bayCount() > 1 ? 'bay ' + (b + 1) + ': ' : '') + ({ coming: 'car on its way', waiting: 'customer at the desk', done: 'fixed, take the money', paid: 'paid', leaving: 'leaving' }[J.state] || (s ? (J.hold === 'parts' ? 'waiting on parts' : s.label.toLowerCase()) : J.state));
   }
   GAME.panel = function (kind) {
     if (kind !== 'jobs') return null;
@@ -9240,17 +9774,28 @@
     for (var b = 0; b < bayCount(); b++) {
       var J = jobAt(b); if (!J) { h += '<p class="dc-sub">Bay ' + (b + 1) + ': no car in. The next one comes between a quarter past eight and five.</p>'; continue; }
       var s = curStep(J), cu = customerIn(b), here = cu && !cu.walking;
-      h += '<div class="dc-card"><div class="body"><b>Bay ' + (b + 1) + ' · ' + esc(J.car.make) + ' · ' + esc(J.car.plate) + '</b><small>' + esc(J.car.name) + ': ' + esc(faultOf(J.car).symptom) + '</small><small>' + esc(J.state === 'waiting' ? 'the customer is at the desk' : J.state === 'taken' ? jobName(J) + ' · step ' + (J.step + 1) + ' of ' + stepsOf(J).length + ': ' + (s ? s.label : '') + (J.hold === 'parts' ? ' · waiting on parts' : '') : J.state === 'done' ? 'fixed, the payment waits at the desk' : J.state) + '</small></div><div style="text-align:right"><div class="price">' + money(J.price) + '</div>' + (J.state === 'waiting' && here ? btn('take', b, 'Take the job', 'primary') : J.state === 'done' && here ? btn('pay', b, 'Take the payment', 'primary') : J.state === 'taken' && J.car.extra && !J.offered && here ? btn('offer', b, 'Offer the extra', 'primary') : '') + '</div></div>';
+      if (diagnosing(J)) { h += diagCardHtml(b, J); continue; }
+      h += '<div class="dc-card"><div class="body"><b>Bay ' + (b + 1) + ' · ' + esc(J.car.make) + ' · ' + esc(J.car.plate) + '</b><small>' + esc(J.car.name) + ': ' + esc(symptomOf(J.car).says) + '</small><small>' + esc(J.state === 'waiting' ? 'the customer is at the desk' + (unnamed(J) ? ': it could be ' + shortList(candList(J)) : '') : J.state === 'taken' ? jobName(J) + ' · step ' + (J.step + 1) + ' of ' + stepsOf(J).length + ': ' + (s ? s.label : '') + (J.hold === 'parts' ? ' · waiting on parts' : '') : J.state === 'done' ? 'fixed, the payment waits at the desk' : J.state) + '</small></div><div style="text-align:right"><div class="price">' + money(J.price) + '</div>' + (J.state === 'waiting' && here ? btn('take', b, 'Take the job', 'primary') : J.state === 'done' && here ? btn('pay', b, 'Take the payment', 'primary') : J.state === 'taken' && J.car.extra && !J.offered && here ? btn('offer', b, 'Offer the extra', 'primary') : '') + '</div></div>';
     }
     h += '<h3>Done</h3>' + (S.done.length ? '<table class="dc-table"><tr><th>Day</th><th>Time</th><th>Customer</th><th>Car</th><th>Job</th><th>Paid</th></tr>' + S.done.map(function (d) { return '<tr><td>' + d.day + '</td><td>' + esc(d.t) + '</td><td>' + esc(d.name) + '</td><td>' + esc(d.make) + '</td><td>' + esc(d.job) + '</td><td>' + money(d.price) + '</td></tr>'; }).join('') + '</table>' : '<p class="dc-sub">Nothing yet.</p>');
     return { title: 'The clipboard', tabs: [], body: h };
   };
-  GAME.panelAct = function (act, arg) { var b = +arg || 0; if (act === 'take') { takeJob(b); renderPanel(); return true; } if (act === 'pay') { takePayment(b); renderPanel(); return true; } if (act === 'offer') { offerExtra(b); renderPanel(); return true; } return false; };
+  // the clipboard's card for a bay whose fault is being found: the symptom, the findings, the checks left, a button an answer
+  function diagCardHtml(b, J) {
+    var D = J.diag, found = CHECK_IDS.filter(function (k) { return D.done[k] !== undefined; }), ck = checksFor(J), mine = !(J.assign && staffById(J.assign));
+    return '<div class="dc-card"><div class="body"><b>Bay ' + (b + 1) + ' · ' + esc(J.car.make) + ' · ' + esc(J.car.plate) + ' · find the fault</b><small>' + esc(J.car.name) + ': ' + esc(symptomOf(J.car).says) + '</small>' +
+      (D.wrong.length ? '<small>Tried, and it still did it: ' + esc(D.wrong.map(function (f) { return faultById(f).short; }).join(', ')) + '</small>' : '') +
+      found.map(function (k) { return '<small>' + esc(CHECKS[k].label) + ': <b>' + esc(D.done[k]) + '</b></small>'; }).join('') +
+      (ck.length ? '<small>Still to check: ' + esc(ck.map(function (k) { return CHECKS[k].label.toLowerCase() + ' (' + placeName(CHECKS[k].at) + (CHECKS[k].tool ? ', the ' + TOOLS[CHECKS[k].tool].name : '') + ')'; }).join('; ')) + '</small>' : '') +
+      '</div><div style="text-align:right">' + candList(J).map(function (f) { return btn('name', b + ':' + f, 'It is: ' + esc(faultById(f).short), 'primary', !mine); }).join(' ') + '</div></div>';
+  }
+  GAME.panelAct = function (act, arg) { if (act === 'name') { var a = String(arg).split(':'), r = nameFault(+a[0] || 0, a[1], 'player'); if (r) toast(r, 'bad'); renderPanel(); return true; } var b = +arg || 0; if (act === 'take') { takeJob(b); renderPanel(); return true; } if (act === 'pay') { takePayment(b); renderPanel(); return true; } if (act === 'offer') { offerExtra(b); renderPanel(); return true; } return false; };
   GAME.statsHtml = function () { return '<h3>The books</h3><p>Day ' + S.day + ' · ' + money(S.bank) + ' in the bank · ' + S.stats.jobs + ' jobs · ' + money(S.stats.earned) + ' taken · rep ' + S.rep + '</p>' + GAME.panel('jobs').body; };
   GAME.menuLine = function () { return 'The garage waits until you come back.'; };
   GAME.saveLooksRight = function (s) { return typeof s.bank === 'number' && s.stats && typeof s.stats.jobs === 'number'; };
   GAME.guideHtml = function () {
     return '<h3>The garage</h3><p>A car pulls into a bay, the customer walks to the desk and tells you what it does. <kbd>E</kbd> on the customer takes the job. Then you work it step by step: the job card on the bench and the prompt say what is next and where. <kbd>E</kbd> once for a quick step (open the bonnet, take the wheel off), <b>hold</b> <kbd>E</kbd> for the rest (jack the car up, undo the sump plug) and stay at the car while it fills. Fill steps go past the mark if you keep holding: let go at the mark. <kbd>E</kbd> on the customer again takes the payment.</p>' +
+      '<h3>Finding the fault</h3><p>What the customer says is a symptom, and some symptoms could be more than one thing: "it struggles to start" could be the battery, a loose terminal or the spark plugs. Such a job opens as <b>find the fault</b>. The job card lists what it could be and what to check: hold <kbd>E</kbd> at that place on the car. The code reader off the tool wall goes in the socket under the dash or on the battery; some things you just look at. Read what the checks find, then name the fault with its button on the job card or the clipboard. Name it wrong and you find out when you start the car at the end: the part you fitted is lost and the clock keeps running.</p>' +
       '<h3>Tools and parts</h3><p>A step that needs a tool says so: take it off the tool wall, and hang it back with <kbd>E</kbd>. Every job starts at the parts rack: <kbd>E</kbd> takes the parts. Short of a part, the job waits on it.</p>' +
       '<h3>The PC</h3><p>On the desk. <b>Parts</b>: order from the supplier (the van comes at half past eight tomorrow, or express within the hour). <b>Stock</b>: the shelves. <b>Jobs</b>: the bays, and who works them. <b>Staff</b>: hire from 3 (apprentice), 5 (mechanic) and 7 (receptionist). <b>Garage</b>: the tyre corner, the stores shed, tools, a faster jack. <b>Books</b>: the money and what the town says. Arrows on the screen or the mouse wheel scroll it.</p>' +
       '<h3>Rep</h3><p>On time: +2. Late or kept overnight: -1. No parts at closing, the car goes home unfixed: -3. A comeback (a job done badly) comes back free. The higher the rep, the more cars and the more they pay for labour.</p>' +
@@ -9265,6 +9810,7 @@
     fix: function (b) { b = +b || 0; var J = jobAt(b); if (!J) return 'no job'; if (J.state === 'waiting') takeJob(b); if (J.state === 'taken') { J.step = stepsOf(J).length; J.vis = {}; carVis(b); jobFinished(b, 'dev'); } return 'job ' + J.state; },
     leave: function (b) { b = +b || 0; if (!jobAt(b)) return 'no car'; removeCustomer(b); removeCar(b); S.jobs[b] = null; G.nextCarAt = worldTime + 5; return 'gone'; },
     rep: function (n) { S.rep = clamp(Math.round(typeof n === 'number' ? n : 50), 0, 100); hudDirty = true; return 'rep ' + S.rep; },
+    name: function (a) { var p = String(a == null ? '' : a).split(':'), b = p.length > 1 ? +p[0] || 0 : 0, f = p.length > 1 ? p[1] : p[0], J = jobAt(b); if (!diagnosing(J)) return 'no fault to find in bay ' + (b + 1); if (!f) return 'it could be ' + candList(J).join(', ') + ' (it is ' + J.car.fault + ')'; return nameFault(b, f, 'player') || 'named ' + f; },
     level: function () { addXp(xpFor(S.level) - S.xp); return 'level ' + S.level; },
     cash: function (n) { pay(typeof n === 'number' ? n : 1000, 'dev cash'); return money(S.bank); },
     stock: function () { Object.keys(PARTS).forEach(function (p) { if (S.level >= PARTS[p].lvl) S.stock[p] = Math.max(S.stock[p] || 0, 3); }); stockDraw(); return stockLine(); },
@@ -9276,8 +9822,8 @@
   // ── Boot ──────────────────────────────────────────────────────────
   GAME.handle = 'GARAGE'; GAME.versionGlobal = 'GARAGE_VERSION';
   GAME.freshState = function () {
-    return { day: 1, time: OPEN_AT, bank: 400, rep: 10, level: 1, xp: 0, stage: 1, doorOpen: false, door2Open: false, jobs: [], done: [], stats: { earned: 0, spent: 0, jobs: 0, fixed: 0, days: 0, late: 0 }, log: [], ledger: [], layout: {}, custom: [], hdoors: {},
-      stock: { oil: 2, oilfilter: 2, pads: 1, bulb: 3, battery: 1 }, orders: [], delivery: null, minStock: {}, tools: { spanner: true, brace: true, filterwrench: true }, tool: null, hand: null, up: {}, staff: [], cands: null, comebacks: [], repLog: [], layoutRev: 1 };
+    return { day: 1, time: OPEN_AT, bank: 400, rep: 10, level: 1, xp: 0, stage: 1, doorOpen: false, door2Open: false, jobs: [], done: [], stats: { earned: 0, spent: 0, jobs: 0, fixed: 0, days: 0, late: 0, diagRight: 0, wrong: 0 }, log: [], ledger: [], layout: {}, custom: [], hdoors: {},
+      stock: { oil: 2, oilfilter: 2, pads: 1, bulb: 3, battery: 1 }, orders: [], delivery: null, minStock: {}, tools: { spanner: true, brace: true, filterwrench: true, reader: true }, tool: null, hand: null, up: {}, staff: [], cands: null, comebacks: [], repLog: [], layoutRev: 1 };
   };
   // the HUD chips of src/00-ui.js are expressions over the editor's kit: these are the game's own names they read
   GAME.editorKit = function () { return { jobChip: jobChip, handLine: handLine, jobAt: jobAt, stockTotal: stockTotal, stockCap: stockCap }; };
@@ -9289,6 +9835,9 @@
     if (s.job !== undefined) { s.jobs = s.job ? [s.job] : []; delete s.job; }
     if (!s.stats.jobs) s.stats.jobs = s.stats.jobs || 0;
     if (s.jobs) s.jobs.forEach(function (J) { if (J && !J.faults) { J.faults = [J.car.fault]; J.step = 0; J.stepP = 0; J.vis = {}; J.parts = 0; if (J.state === 'fixing') J.state = 'taken'; } });
+    // a save from 0.3: its jobs were named when they were taken, and the code reader goes up on the tool wall
+    if (s.jobs) s.jobs.forEach(function (J) { if (J && !J.diag) J.diag = { cands: [J.car.fault], done: {}, wrong: [], named: J.car.fault, checks: 0, p: 0 }; });
+    if (s.tools && s.tools.reader === undefined) s.tools.reader = true;
     return s;
   };
   GAME.afterBuild = function (loaded) {
@@ -9301,8 +9850,8 @@
   GAME.startNote = function (loaded) { return loaded ? 'Slot ' + BOOT_SLOT + ' · last saved ' + (S.savedAt ? new Date(S.savedAt).toLocaleString() : 'never') : 'Slot ' + BOOT_SLOT + ' · the first car is due at a quarter past eight'; };
   GAME.onEnter = function (loaded) { if (!loaded) { S.time = OPEN_AT; logEvent('Welcome to Garage Co. This is your lock-up. Pull the chain to open the roll door; the first car is due at a quarter past eight. The PC on the desk orders parts.', 'rare'); save(); } else logEvent('Back at the garage. Day ' + S.day + ', ' + fmtTime(S.time) + '.'); G.nextCarAt = worldTime + 12; };
   GAME.menuCamera = function (dt) { var t = worldTime * 0.05; camera.position.set(9 + Math.sin(t) * 2.5, 2.4, 13 + Math.cos(t) * 1.5); camera.lookAt(0, 1.6, LOCKUP.z - 1); };
-  GAME.tick = function (dt) { tickTime(dt); tickCars(dt); tickCustomers(dt); workTick(dt); tickVan(dt); staffTick(dt); };
-  GAME.present = function (dt) { tickRoll(dt); tyreWheelSync(); liftSync(); };
+  GAME.tick = function (dt) { tickTime(dt); tickCars(dt); tickCustomers(dt); workTick(dt); tickVan(dt); staffTick(dt); for (var b = 0; b < bayCount(); b++) gcCarAnimate(b, dt); };
+  GAME.present = function (dt) { tickRoll(dt); tyreWheelSync(); liftSync(); gcHeldSync(dt); };
   GAME.hiddenTick = function (dt) { tickRoll(dt); };
   GAME.T = function () {
     return { GAME: GAME, G: G, traffic: traffic, FAULTS: FAULTS, PARTS: PARTS, STEPS: STEPS, PLACES: PLACES, nearTyre: nearTyre, tyreSpot: tyreSpot, staffById: staffById, propPlacement: propPlacement, drawScreens: drawScreens, saveNow: saveNow, TOOLS: TOOLS, UPGRADES: UPGRADES, ROLES: ROLES, LOCKUP: LOCKUP, HALL2: HALL2, FORECOURT: FORECOURT, BAY: BAY, BAYS: BAYS, DESK: DESK, DESK_STAND: DESK_STAND, ROAD_Z: ROAD_Z, PC: PC,
@@ -9310,6 +9859,7 @@
       newCar: newCar, spawnCar: spawnCar, removeCar: removeCar, placeCar: placeCar, spawnCustomer: spawnCustomer, removeCustomer: removeCustomer, restoreJobs: restoreJobs, takeJob: takeJob, takePayment: takePayment, offerExtra: offerExtra, addXp: addXp, xpFor: xpFor, tickRoll: tickRoll, dayEnd: dayEnd, repChange: repChange,
       stepsOf: stepsOf, curStep: curStep, doStep: doStep, placeUse: placeUse, placePrompt: placePrompt, rackUse: rackUse, rackPrompt: rackPrompt, toolUse: toolUse, stepBlock: stepBlock, missingParts: missingParts, carVis: carVis, tyreUse: tyreUse, tyrePrompt: tyrePrompt,
       orderParts: orderParts, putAway: putAway, stockTotal: stockTotal, stockCap: stockCap, onOrder: onOrder, buyUpgrade: buyUpgrade, owns: owns, roomInst: roomInst, hire: hire, candidates: candidates, staffList: staffList, assignNext: assignNext, letGo: letGo, pcTap: pcTap, pcGo: pcGo, pcRows: pcRows, jobChip: jobChip, handLine: handLine,
+      SYMPTOMS: SYMPTOMS, CHECKS: CHECKS, symptomOf: symptomOf, diagnosing: diagnosing, candList: candList, consistent: consistent, checksFor: checksFor, checkAt: checkAt, doCheck: doCheck, nameFault: nameFault, jobLabel: jobLabel,
       car: function (b) { return carIn(b || 0); }, LIFTS: LIFTS, liftWorld: liftWorld, liftCar: liftCar, liftUse: liftUse, liftPrompt: liftPrompt, getIn: getIn, getOut: getOut, canDrive: canDrive, carHeight: carHeight, drive: function () { return G.drive; }, customer: function (b) { return customerIn(b || 0); }, job: function (b) { return jobAt(b || 0); }, van: function () { return G.van; }, carPrompt: carPrompt, customerPrompt: customerPrompt, drawJobCard: drawJobCard };
   };
   CO.boot(GAME);

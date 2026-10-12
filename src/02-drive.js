@@ -30,7 +30,7 @@
   // the height the car stands at now: on a lift it rises as the step fills
   function carHeight(b) {
     var J = jobAt(b), v = (J && J.vis) || {}; if (!J) return 0;
-    if (J.lift === null || J.lift === undefined) return v.up ? 0.14 : 0;
+    if (J.lift === null || J.lift === undefined) { var sj = curStep(J), fj = v.up ? 1 : 0; if (sj && sj.at === 'jack' && J.stepP > 0) fj = sj.fx === 'up' ? Math.min(1, J.stepP) : 1 - Math.min(1, J.stepP); return fj * 0.14; }   // the jack lifts it as its step fills
     var s = curStep(J), f = v.up ? 1 : 0; if (s && s.at === 'lift' && J.stepP > 0) f = s.fx === 'up' ? Math.min(1, J.stepP) : 1 - Math.min(1, J.stepP);
     return f * LIFT_H;
   }
@@ -82,7 +82,7 @@
     driveStep(D.v, player.keys, dt, { spec: CAR_DRIVE, blocked: driveBlocked });
     C.x = D.v.x; C.z = D.v.z; C.yaw = D.v.yaw - Math.PI / 2; C.g.position.set(C.x, 0, C.z); C.g.rotation.y = C.yaw;
     var ws = C.g.userData.wheels; if (ws && D.v.speed) ws.forEach(function (w) { w.rotation.z -= D.v.speed * dt / 0.33; });
-    player.x = C.x; player.z = C.z; vehicleCamera(D.v, D.look, 1.22, 0.25);
+    player.x = C.x; player.z = C.z; gcDriverCamera(C, D);
     return true;
   };
   GAME.useOverride = function () { if (G.drive) { getOut(); return true; } return false; };

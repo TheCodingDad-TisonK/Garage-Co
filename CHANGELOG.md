@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2 (2026-10-12): The Diagnosis Update
+
+- **Find the fault.** What the customer says at the desk is a symptom now, not the job. "It struggles to start in the mornings" could be a worn-out battery, a loose battery terminal or worn spark plugs. A symptom that could be more than one thing opens as a job to find the fault; one that can only be one thing is named at the desk as before.
+- **Checks.** The job card lists what it could be and what would tell them apart. Hold E at the place on the car: read the codes with the new code reader (it hangs on the tool wall from the start) in the socket under the dash, test the battery with it, look in the air box, at the brake through the wheel, or over the tyre. Each check says what it found, and the job card keeps the findings.
+- **Name it.** Every possible answer has a button on the job card and on the clipboard. Name it without checking if you feel lucky. Name it wrong and you find out when you start the car at the end: the part you fitted is lost, the customer will not pay for it, and the clock keeps running. Right first time after a check earns a little extra XP, and the Books app counts the right calls and the wrong ones.
+- **A new job: a loose battery terminal.** No part needed, just the spanner. Put a new battery in a car that only had a loose terminal and that battery is gone.
+- **The mechanic finds faults too.** The mechanic checks and names the fault; one with little skill sometimes guesses. The apprentice waits until the fault is named, then does the work.
+- **New cars.** Every customer car is built from scratch: a shaped body with wheel arches, glass you can see through, round headlights, door lines, mirrors, alloy wheels with real tyres, and brakes behind them. Inside, seats, a dashboard with dials, and a steering wheel. Under the bonnet, an engine bay with the engine, coil packs, battery, air box, coolant tank and the rest.
+- **See the work.** Parts move while you hold E. The jack pumps the car up. The wheel nuts spin out and the wheel is laid on the floor. The caliper swings up and the pads are swapped. The sump plug drops and the old oil runs into the pan. The oil filter spins off, the jug pours, and the battery clamp comes off before the battery lifts out. The headlight cover twists off for the bulb, the air filter comes up out of its box, the coil packs lift for the spark plugs, the wipers lift off the glass, and the old exhaust section comes down for the new one. Staff work shows the same way.
+- **Faults you can see.** A dead headlight stays dark until the new bulb is in. Worn pads, a scored disc, a clogged air filter, sooty plugs and a furred battery terminal look the part, and come out new.
+- **The driver's seat.** Getting in puts you in the left seat behind the wheel, looking over the dashboard and the bonnet. The steering wheel turns with A and D.
+- **Tools.** The spanner, wheel brace, filter wrench, plug socket and code reader look like themselves on the tool wall, and the one you carry shows in your hand. It moves while you work.
+- **Parts on the shelves.** Jugs of oil, oil filters, batteries, coolant bottles, air filters, tins of plugs and printed cartons, on the rack, in the stores and on the van's pallet.
+- **The trolley jack** under the car and on the floor is a proper trolley jack, with a handle that pumps.
+- A save from 0.3 carries over: jobs in progress keep their fault, and the code reader goes up on the tool wall.
+
 ## 0.3.1 (2026-10-12): Bug Patch
 
 - A save from 0.2 kept its own copy of where every prop stood, from before the lock-up was moved, so the desk, the sofa, the break room and more stood two metres out in front of the building. That old copy is dropped once when the save loads, and everything goes back where it belongs.

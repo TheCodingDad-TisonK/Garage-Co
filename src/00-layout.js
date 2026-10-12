@@ -179,5 +179,7 @@
       { id: "cp-mv2rkcdd-2y", type: "ctStreetLamp", x: -29.15, z: 22.75, rot: 3, h: 0 },
       { id: "cp-mv2rkx98-2z", type: "bdTerrace", x: -37.15, z: 17.1, rot: 0, h: 0 },
       { id: "cp-mv2z6w9w-3", type: "rdStraight20", x: -20.25, z: 26.75, rot: 0, h: 0 },
+      { id: "gc-shed", type: "gcShed", x: -4.6, z: 4.4, rot: 0, h: 0 },
+      { id: "gc-tyre", type: "gcTyre", x: -8.5, z: 5, rot: 0, h: 0 },
     ]
   });

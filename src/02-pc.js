@@ -58,9 +58,9 @@
       for (var b = 0; b < bayCount(); b++) (function (b) {
         var J = jobAt(b); if (!J) { rows.push({ text: 'Bay ' + (b + 1) + ': empty', sub: 'the next car is on its way' }); return; }
         var s = curStep(J), who = J.assign && staffById(J.assign);
-        rows.push({ text: 'Bay ' + (b + 1) + ': ' + J.car.name + "'s " + J.car.make + ' · ' + jobName(J), sub: (J.state === 'taken' ? 'step ' + (J.step + 1) + '/' + stepsOf(J).length + ': ' + (s ? s.label : '') : J.state) + (J.hold === 'parts' ? ' · WAITING ON PARTS: ' + missingParts(J).map(function (p) { return PARTS[p].name; }).join(', ') : '') + (J.due && J.state === 'taken' ? ' · promised ' + fmtTime(J.due) : '') + ' · ' + money(J.price),
+        rows.push({ text: 'Bay ' + (b + 1) + ': ' + J.car.name + "'s " + J.car.make + ' · ' + jobLabel(J), sub: (diagnosing(J) ? Object.keys(J.diag.done).length + ' check' + (Object.keys(J.diag.done).length === 1 ? '' : 's') + ' done; name it on the job card' : J.state === 'taken' ? 'step ' + (J.step + 1) + '/' + stepsOf(J).length + ': ' + (s ? s.label : '') : J.state) + (J.hold === 'parts' ? ' · WAITING ON PARTS: ' + missingParts(J).map(function (p) { return PARTS[p].name; }).join(', ') : '') + (J.due && J.state === 'taken' ? ' · promised ' + fmtTime(J.due) : '') + ' · ' + money(J.price),
           col: J.hold === 'parts' ? '#ff6b5e' : null,
-          btns: [J.state === 'taken' && staffList().some(function (w) { return canDo(w, J); }) ? { label: who ? who.name : 'Give to…', w: 96, act: function () { assignNext(b); } } : null, J.state === 'taken' && J.car.extra && !J.offered && customerIn(b) && !customerIn(b).walking ? { label: 'Offer extra', w: 96, act: function () { offerExtra(b); } } : null].filter(Boolean) });
+          btns: [J.state === 'taken' && staffList().some(function (w) { return canDo(w, J); }) ? { label: who ? who.name : 'Give to…', w: 96, act: function () { assignNext(b); } } : null, J.state === 'taken' && J.car.extra && !J.offered && !unnamed(J) && customerIn(b) && !customerIn(b).walking ? { label: 'Offer extra', w: 96, act: function () { offerExtra(b); } } : null].filter(Boolean) });
       })(b);
       rows.push({ head: true, text: 'Done (' + S.done.length + ')' });
       S.done.slice(0, 20).forEach(function (d) { rows.push({ text: 'Day ' + d.day + ' ' + d.t + ' · ' + d.name + ' · ' + d.job, sub: d.make + ' · ' + money(d.price) }); });
@@ -78,6 +78,7 @@
       var today = 0, out = 0; (S.ledger || []).forEach(function (l) { if (l.day === S.day) { if (l.n > 0) today += l.n; else out -= l.n; } });
       rows.push({ head: true, text: money(S.bank) + ' in the bank · today in ' + money(today) + ', out ' + money(out) });
       rows.push({ text: 'Rep ' + S.rep + ' of 100', sub: 'cars every ' + Math.round(47 * (1.3 - S.rep / 200)) + ' s or so · labour at ' + Math.round(labourMul() * 100) + '%' });
+      rows.push({ text: 'Diagnosis: ' + (S.stats.diagRight || 0) + ' right first time · ' + (S.stats.wrong || 0) + ' wrong', sub: 'a wrong name costs the part you fitted and the time' });
       var wages = 0; staffList().forEach(function (w) { wages += w.wage; }); rows.push({ text: 'Wages: ' + money(wages) + ' a day', sub: staffList().length + ' staff · paid at closing' });
       rows.push({ head: true, text: 'What the town says' });
       (S.repLog || []).slice(0, 12).forEach(function (r) { rows.push({ text: (r.n > 0 ? '+' : '') + r.n + ' · ' + r.why, sub: 'day ' + r.day + ' ' + r.t, col: r.n > 0 ? '#5fd38d' : '#ff6b5e' }); });

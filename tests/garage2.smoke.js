@@ -20,4 +20,12 @@ module.exports = `
   for (let i = 0; i < 40 && T.job(1).state === 'taken'; i++) T.run(3);
   ok(T.job(1).state === 'done', 'Marta did the brakes in bay 2: ' + T.job(1).state + ' at step ' + T.job(1).step);
   T.pcGo('jobs'); ok(T.pcRows('jobs').filter((r) => /^Bay/.test(r.text)).length === 2, 'the Jobs app lists both bays');
+  // the mechanic finds a fault: a sluggish car could be the air filter or the plugs; Marta checks, names it and fits it
+  T.G.nextCarAt = Infinity; T.takePayment(1); T.run(40); ok(!T.job(1), 'bay 2 is free again');
+  S.stock.airfilter = 3; T.devCommand('car', 'airfilter'); T.devCommand('park'); T.run(4); T.run(16);
+  const M = T.job(1); ok(M && M.car.fault === 'airfilter', 'an air filter car in bay 2'); T.takeJob(1);
+  ok(T.diagnosing(M) && M.diag.cands.slice().sort().join() === 'airfilter,plugs', 'it could be the air filter or the plugs: ' + M.diag.cands.join());
+  M.diag.rush = false;
+  for (let i = 0; i < 60 && M.state === 'taken'; i++) T.run(2);
+  ok(M.state === 'done' && M.diag.named === 'airfilter' && M.diag.checks >= 1 && !M.diag.wrong.length, 'Marta checked (' + Object.keys(M.diag.done).join() + '), named the air filter and fitted it: ' + M.state);
 `;

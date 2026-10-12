@@ -49,7 +49,7 @@ module.exports = `
   // a puncture: the wheel goes to the tyre corner and back
   S.stock.plugkit = 2; park('puncture'); T.takeJob(0); const P = T.job(0); T.rackUse();
   atCar(0); look(0, 'jack'); T.useFocus(); await hold(1.4); ok(P.step === 2, 'the fast jack is up in half the time');
-  T.toolUse('brace'); look(0, 'wheel'); T.useFocus(); await hold(2.7); look(0, 'wheel'); T.useFocus();
+  T.toolUse('brace'); look(0, 'wheel'); T.useFocus(); await hold(2.7); look(0, 'wheel'); T.useFocus(); T.run(1.2);
   ok(P.step === 4 && P.vis.wheelOff && S.hand && S.hand.kind === 'wheel' && !T.car(0).looseWheel.visible, 'the wheel is off and in your hands');
   { const ts = T.tyreSpot(); T.player.x = ts.x; T.player.z = ts.z; const ti = T.roomInst('gcTyre').g.position; const txt = T.lookAt(ti.x, 0.8, ti.z - 0.6); ok(/water tank/.test(txt), 'the tyre corner: ' + txt); }
   T.tyreUse(); await hold(3.2); T.tyreUse(); await hold(2.2); T.tyreUse(); await hold(2.2); ok(P.step === 7, 'found the hole, plugged it, pumped it up');
@@ -65,7 +65,7 @@ module.exports = `
   T.pcGo('staff'); const cands = T.candidates(); ok(cands.length === 3 && cands.every((c) => c.role === 'apprentice'), 'three apprentices are looking for work at level 3');
   const hid = cands[0].id, hname = cands[0].name; ok(T.hire(hid) === '' && T.staffList().length === 1 && !!T.G.staff[hid], 'hired ' + hname);
   ok(T.hire(T.candidates()[0].id) !== '' && T.staffList().length === 1, 'the lock-up has room for one');
-  S.stock.battery = 2; park('battery'); T.takeJob(0); const W = T.job(0); W.sloppy = true;
+  S.stock.battery = 2; park('battery'); T.takeJob(0); T.nameFault(0, 'battery'); const W = T.job(0); W.sloppy = true;
   for (let i = 0; i < 40 && W.state === 'taken'; i++) T.run(3);
   ok(W.state === 'done' && T.staffList()[0].jobs === 1, 'the apprentice did the battery job alone: ' + W.state + ' at step ' + W.step);
   ok(S.comebacks.length === 1, 'a job the apprentice rushed is coming back');

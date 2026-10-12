@@ -56,7 +56,7 @@ module.exports = `
   look(0, 'jack'); T.useFocus(); await hold(2.2); ok(J.step === 7 && !J.vis.up && T.car(0).g.position.y === 0, 'the car is down');
   // the bonnet, and the fill: hold too long and it goes over the mark
   { const txt = look(0, 'cap'); ok(!/Fill/.test(txt), 'the oil cap says nothing with the bonnet shut: ' + txt); }
-  { const txt = look(0, 'bonnet'); ok(/Open the bonnet/.test(txt), 'the bonnet: ' + txt); } T.useFocus(); ok(J.step === 8 && J.vis.open && T.car(0).lid.rotation.z > 1, 'the bonnet is up');
+  { const txt = look(0, 'bonnet'); ok(/Open the bonnet/.test(txt), 'the bonnet: ' + txt); } T.useFocus(); T.run(1.5); ok(J.step === 8 && J.vis.open && T.car(0).lid.rotation.z > 1 && T.car(0).parts.stay.visible, 'the bonnet swings up on its hinge and the stay holds it');
   { const txt = look(0, 'cap'); ok(/Hold E: Fill it with fresh oil/.test(txt), 'the oil cap: ' + txt); }
   T.useFocus(); await hold(3.6); ok(J.step === 8 && J.over === true, 'held too long: over the mark (' + J.stepP.toFixed(2) + ')');
   look(0, 'cap'); T.useFocus(); await hold(0.2); ok(J.step === 9, 'let a little out and it is at the mark: the oil is done');
@@ -78,7 +78,7 @@ module.exports = `
   T.save(); S.stats.jobs = 99; T.loadSave(T.GAME.freshState, T.GAME.migrate); ok(S.stats.jobs === 1 && S.done.length === 1 && S.day === 2 && S.stock.oil === 1, 'the save round-trips the books and the stock');
   // a job survives a reload: the car is back in the bay with the bonnet up, and the customer at the desk
   T.devCommand('car', 'battery'); T.devCommand('park'); T.run(4); ok(T.job(0) && T.job(0).state === 'waiting' && T.job(0).car.fault === 'battery', 'dev: a battery car parked at once: ' + (T.job(0) && T.job(0).state));
-  T.run(16); T.takeJob(0); T.rackUse(); T.player.x = T.BAY.x + 2.4; T.player.z = T.BAY.z; look(0, 'bonnet'); T.useFocus(); ok(T.job(0).step === 2 && T.job(0).vis.open, 'the battery job is at the clamp with the bonnet up');
+  T.run(16); T.takeJob(0); ok(T.diagnosing(T.job(0)), 'it struggles to start: a battery or a terminal, a job to find the fault on'); T.nameFault(0, 'battery'); T.rackUse(); T.player.x = T.BAY.x + 2.4; T.player.z = T.BAY.z; look(0, 'bonnet'); T.useFocus(); ok(T.job(0).step === 2 && T.job(0).vis.open, 'the battery job is at the clamp with the bonnet up');
   T.save(); T.removeCustomer(0); T.removeCar(0); T.loadSave(T.GAME.freshState, T.GAME.migrate); T.restoreJobs();
   ok(T.job(0) && T.job(0).state === 'taken' && T.job(0).step === 2 && !!T.car(0) && T.car(0).lid.rotation.z > 1 && !!T.customer(0) && T.customer(0).at === 'desk', 'a reload puts the car back with its bonnet up and the customer at the desk');
   ok(/step 3 of 5/.test(T.devCommand('step')) && T.job(0).step === 3, 'dev: step does the next step');

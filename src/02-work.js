@@ -1,13 +1,15 @@
 //@ Garage Co., part 02: the work. A job is a list of steps at the parts of the car: the bonnet opens, the car goes up on the jack, a wheel comes off, a tool comes off the wall. Press E, or hold it while a step fills.
   // ── Tools ─────────────────────────────────────────────────────────
-  // the hand tools on the tool wall. The plug socket is bought on the PC; the rest come with the lock-up
+  // the hand tools on the tool wall. The plug socket is bought on the PC; the rest come with the lock-up. The code reader finds faults
+  // (the checks, below): it reads the codes from the socket under the dash and tests the battery
   var TOOLS = {
     spanner: { name: 'spanner', len: 0.32, headW: 0.1 },
     brace: { name: 'wheel brace', len: 0.46, headW: 0.16 },
     filterwrench: { name: 'filter wrench', len: 0.28, headW: 0.14 },
-    socket: { name: 'spark plug socket', len: 0.3, headW: 0.06 }
+    socket: { name: 'spark plug socket', len: 0.3, headW: 0.06 },
+    reader: { name: 'code reader', len: 0.2, headW: 0.14, mat: MAT.yellow }
   };
-  var TOOL_IDS = ['spanner', 'brace', 'filterwrench', 'socket'];
+  var TOOL_IDS = ['spanner', 'brace', 'filterwrench', 'socket', 'reader'];
   function toolOwned(t) { return !!(S.tools && S.tools[t]); }
   function toolPrompt(t) {
     if (!toolOwned(t)) return t === 'socket' ? 'An empty hook: the spark plug socket is on the PC (Garage)' : '';
@@ -30,11 +32,12 @@
     plugs: { p: [1.6, 1.08, 0], s: [0.5, 0.2, 0.5], name: 'the spark plugs', bay: true },
     lamp: { p: [1.98, 0.84, 0.62], s: [0.24, 0.24, 0.36], name: 'the back of the headlight', bay: true },
     wipers: { p: [0.95, 1.24, 0.2], s: [0.4, 0.3, 1.4], name: 'the windscreen' },
-    sump: { p: [1.3, 0.24, 0.85], s: [0.5, 0.3, 0.45], name: 'the sump plug, under the front' },
-    filter: { p: [0.85, 0.26, 0.85], s: [0.4, 0.3, 0.45], name: 'the oil filter, under the engine' },
+    sump: { p: [1.06, 0.24, 0.85], s: [0.3, 0.3, 0.45], name: 'the sump plug, under the front' },
+    filter: { p: [0.72, 0.26, 0.85], s: [0.3, 0.3, 0.45], name: 'the oil filter, under the engine' },
     wheel: { p: [1.4, 0.36, 0.98], s: [0.8, 0.8, 0.3], name: 'the front wheel' },
     hub: { p: [1.4, 0.36, 0.98], s: [0.8, 0.8, 0.3], name: 'the hub' },
     exhaust: { p: [-1.4, 0.26, 0.75], s: [1.0, 0.3, 0.4], name: 'the exhaust' },
+    obd: { p: [0.45, 0.78, 0.98], s: [0.6, 0.44, 0.24], name: 'the reader socket, under the dash' },
     rack: { name: 'the parts rack' },
     lift: { name: 'the lift control box' },
     tyre: { name: 'the tyre corner' }
@@ -43,27 +46,29 @@
   // ── The steps of each job ─────────────────────────────────────────
   // [place, action, seconds, tool, what it says, what it does to the car]. Actions: fetch (E at the parts rack or a store: takes the
   // job's parts), press (once), hold (hold E while it fills), fill (hold E and let go at the full mark), wheel (press, with the
-  // wheel in your hands). Workers do the same steps at their own pace
+  // wheel in your hands). The seventh field names what the step moves on the car while it fills (02-car.js, gcCarAnimate). Workers do
+  // the same steps at their own pace
   var JACK_UP = ['jack', 'hold', 2.5, null, 'Jack the car up', 'up'], LOWER = ['jack', 'hold', 2, null, 'Lower the car', 'down'];
   var OPEN = ['bonnet', 'press', 0, null, 'Open the bonnet', 'open'], SHUT = ['bonnet', 'press', 0, null, 'Shut the bonnet', 'shut'];
-  var NUTS_OFF = ['wheel', 'hold', 2.5, 'brace', 'Undo the wheel nuts'], WHEEL_OFF = ['wheel', 'press', 0, null, 'Take the wheel off', 'wheeloff'];
-  var WHEEL_ON = ['hub', 'wheel', 0, null, 'Put the wheel back on', 'wheelon'], NUTS_ON = ['wheel', 'hold', 2, 'brace', 'Do the wheel nuts up'];
+  var NUTS_OFF = ['wheel', 'hold', 2.5, 'brace', 'Undo the wheel nuts', null, 'nutsoff'], WHEEL_OFF = ['wheel', 'press', 0, null, 'Take the wheel off', 'wheeloff'];
+  var WHEEL_ON = ['hub', 'wheel', 0, null, 'Put the wheel back on', 'wheelon'], NUTS_ON = ['wheel', 'hold', 2, 'brace', 'Do the wheel nuts up', null, 'nutson'];
   function fetchStep(what) { return ['rack', 'fetch', 1.5, null, 'Take ' + what + ' from the rack']; }
   var STEPS = {
-    oil: [fetchStep('the oil and a filter'), JACK_UP, ['sump', 'hold', 2, 'spanner', 'Undo the sump plug', 'pan'], ['sump', 'hold', 3, null, 'Let the old oil drain into the pan'], ['filter', 'hold', 2.5, 'filterwrench', 'Swap the oil filter'], ['sump', 'hold', 1.5, 'spanner', 'Put the sump plug back in', 'nopan'], LOWER, OPEN, ['cap', 'fill', 3, null, 'Fill it with fresh oil: let go at the full mark'], SHUT],
-    brakes: [fetchStep('a pad set'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 4, 'spanner', 'Swap the brake pads'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER],
-    bulb: [fetchStep('a bulb'), OPEN, ['lamp', 'hold', 2, null, 'Swap the headlight bulb', 'lampon'], SHUT],
-    battery: [fetchStep('a battery'), OPEN, ['battery', 'hold', 2, 'spanner', 'Undo the battery clamp'], ['battery', 'hold', 2, null, 'Lift the old battery out and drop the new one in'], SHUT],
-    wipers: [fetchStep('a pair of wiper blades'), ['wipers', 'hold', 2, null, 'Swap the wiper blades']],
+    oil: [fetchStep('the oil and a filter'), JACK_UP, ['sump', 'hold', 2, 'spanner', 'Undo the sump plug', 'pan', 'plugout'], ['sump', 'hold', 3, null, 'Let the old oil drain into the pan', null, 'drain'], ['filter', 'hold', 2.5, 'filterwrench', 'Swap the oil filter', null, 'filter'], ['sump', 'hold', 1.5, 'spanner', 'Put the sump plug back in', 'nopan', 'plugin'], LOWER, OPEN, ['cap', 'fill', 3, null, 'Fill it with fresh oil: let go at the full mark', null, 'oilfill'], SHUT],
+    brakes: [fetchStep('a pad set'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 4, 'spanner', 'Swap the brake pads', null, 'pads'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER],
+    bulb: [fetchStep('a bulb'), OPEN, ['lamp', 'hold', 2, null, 'Swap the headlight bulb', 'lampon', 'bulb'], SHUT],
+    battery: [fetchStep('a battery'), OPEN, ['battery', 'hold', 2, 'spanner', 'Undo the battery clamp', null, 'clamp'], ['battery', 'hold', 2, null, 'Lift the old battery out and drop the new one in', null, 'battery'], SHUT],
+    terminal: [OPEN, ['battery', 'hold', 2, 'spanner', 'Clean the terminal and do it up tight', null, 'terminal'], SHUT],
+    wipers: [fetchStep('a pair of wiper blades'), ['wipers', 'hold', 2, null, 'Swap the wiper blades', null, 'wipers']],
     puncture: [fetchStep('a plug kit'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['tyre', 'hold', 3, null, 'Turn the wheel in the water tank until the bubbles show the hole'], ['tyre', 'hold', 2, null, 'Plug the hole'], ['tyre', 'hold', 2, null, 'Pump it up on the air line'], WHEEL_ON, NUTS_ON, LOWER],
-    airfilter: [fetchStep('an air filter'), OPEN, ['airbox', 'hold', 2.5, null, 'Swap the air filter'], SHUT],
-    plugs: [fetchStep('a set of spark plugs'), OPEN, ['plugs', 'hold', 4, 'socket', 'Swap the spark plugs'], SHUT],
-    coolant: [fetchStep('the coolant'), OPEN, ['coolant', 'fill', 2.5, null, 'Top up the coolant: let go at the full mark'], SHUT],
+    airfilter: [fetchStep('an air filter'), OPEN, ['airbox', 'hold', 2.5, null, 'Swap the air filter', null, 'airfilter'], SHUT],
+    plugs: [fetchStep('a set of spark plugs'), OPEN, ['plugs', 'hold', 4, 'socket', 'Swap the spark plugs', null, 'plugs'], SHUT],
+    coolant: [fetchStep('the coolant'), OPEN, ['coolant', 'fill', 2.5, null, 'Top up the coolant: let go at the full mark', null, 'coolant'], SHUT],
     newtyre: [fetchStep('a tyre'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['tyre', 'hold', 4, null, 'Swap the tyre on the tyre machine'], ['tyre', 'hold', 2, null, 'Balance the wheel'], WHEEL_ON, NUTS_ON, LOWER],
-    exhaust: [fetchStep('an exhaust section'), JACK_UP, ['exhaust', 'hold', 3, 'spanner', 'Unbolt the old exhaust section'], ['exhaust', 'hold', 3, 'spanner', 'Bolt the new section on'], LOWER],
-    discs: [fetchStep('the discs and pads'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 5, 'spanner', 'Swap the discs and pads'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER]
+    exhaust: [fetchStep('an exhaust section'), JACK_UP, ['exhaust', 'hold', 3, 'spanner', 'Unbolt the old exhaust section', null, 'exhoff'], ['exhaust', 'hold', 3, 'spanner', 'Bolt the new section on', null, 'exhon'], LOWER],
+    discs: [fetchStep('the discs and pads'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 5, 'spanner', 'Swap the discs and pads', null, 'discs'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER]
   };
-  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, fault: fid }; }
+  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, anim: a[6] || null, fault: fid }; }
   // a job's steps: each fault's in turn (a second fault the customer said yes to comes after the first)
   function stepsOf(J) { var out = []; jobFaults(J).forEach(function (fid) { (STEPS[fid] || []).forEach(function (a) { out.push(liftStep(J, mkStep(a, fid))); }); }); return out; }
   function curStep(J) { if (!J || J.state !== 'taken') return null; return stepsOf(J)[J.step] || null; }
@@ -76,36 +81,125 @@
   }
   function partsCovered(J) { var miss = missingParts(J); return miss.every(function (p) { return onOrder(p) > 0; }); }
 
+  // ── Finding the fault ─────────────────────────────────────────────
+  // a job whose symptom could be more than one open fault starts as "find the fault": J.diag.named is null and J.faults is empty, so it
+  // has no steps yet. A check is a hold of E at a place on the car and finds a line of words for each fault (ok for every fault it
+  // says nothing about); only the checks that would tell the answers on the card apart are offered. You read the findings and name the
+  // fault on the job card. A wrong name is found out when the car is started at the end, and costs the part and the time
+  var CHECKS = {
+    codes: { at: 'obd', tool: 'reader', secs: 2, label: 'Plug the reader in and read the codes', ok: 'No fault codes stored.', finds: { plugs: 'P0300: a random misfire.', airfilter: 'P0101: the air flow reads low.' } },
+    battery: { at: 'battery', tool: 'reader', secs: 1.5, label: 'Test the battery with the reader', ok: '12.6 volts: the battery is healthy and the terminals are tight.', finds: { battery: '11.4 volts and falling: the battery is worn out.', terminal: '12.6 volts, but the negative terminal is furred up and moves on its post.' } },
+    airbox: { at: 'airbox', tool: null, secs: 1.5, label: 'Open the air box and look at the filter', ok: 'The air filter is clean.', finds: { airfilter: 'The air filter is black and clogged.' } },
+    brake: { at: 'wheel', tool: null, secs: 1.5, label: 'Look at the brake through the wheel', ok: 'Plenty of pad left and the disc is smooth.', finds: { brakes: 'The pads are worn thin; the disc is smooth.', discs: 'The pads are down to the metal and the disc is deeply scored.' } },
+    tyre: { at: 'wheel', tool: null, secs: 1.5, label: 'Look over the tyre', ok: 'The tyre is sound.', finds: { puncture: 'A screw in the tread, and plenty of tread left.', newtyre: 'Worn down to the cord across the tread.' } }
+  };
+  var CHECK_IDS = ['codes', 'battery', 'airbox', 'brake', 'tyre'];
+  function finding(cid, fid) { var K = CHECKS[cid]; return (K.finds && K.finds[fid]) || K.ok; }
+  // the answers a car's symptom can be at your level (the true fault is always one of them); a comeback is known already
+  function diagStart(car, known) {
+    var c = known ? [car.fault] : symptomOf(car).faults.filter(function (f) { var F = faultById(f); return F.id === f && F.lvl <= S.level; });
+    if (c.indexOf(car.fault) < 0) c.push(car.fault);
+    return { cands: c, done: {}, wrong: [], named: c.length === 1 ? c[0] : null, checks: 0, p: 0 };
+  }
+  function unnamed(J) { return !!(J && J.diag && !J.diag.named); }
+  function diagnosing(J) { return !!(J && J.state === 'taken' && unnamed(J)); }
+  // the answers still on the card (a wrong name is crossed off), and those the findings so far agree with (the mechanic goes by these)
+  function candList(J) { var D = J.diag; return D.cands.filter(function (f) { return D.wrong.indexOf(f) < 0; }); }
+  function consistent(J) { var D = J.diag; return candList(J).filter(function (f) { for (var c in D.done) if (finding(c, f) !== D.done[c]) return false; return true; }); }
+  function shortList(list) { var a = list.map(function (f) { return faultById(f).short; }); return a.length > 1 ? a.slice(0, -1).join(', ') + ' or ' + a[a.length - 1] : a.join(''); }
+  // the checks worth doing: not done yet, and finding different things across the answers given
+  function checksFor(J, among) {
+    var set = among || candList(J), D = J.diag;
+    return CHECK_IDS.filter(function (cid) { if (D.done[cid] !== undefined) return false; if (CHECKS[cid].tool && !toolOwned(CHECKS[cid].tool)) return false; var seen = {}; set.forEach(function (f) { seen[finding(cid, f)] = 1; }); return Object.keys(seen).length > 1; });
+  }
+  function checkAt(J, at) { return checksFor(J).filter(function (cid) { return CHECKS[cid].at === at; })[0] || null; }
+  function checkBlock(b, cid) {
+    var J = jobAt(b), K = CHECKS[cid];
+    if (J.assign && staffById(J.assign)) return staffById(J.assign).name + ' is on this car';
+    if (PLACES[K.at] && PLACES[K.at].bay && !(J.vis && J.vis.open)) return 'open the bonnet first';
+    if (K.tool && S.tool !== K.tool) return 'you need the ' + TOOLS[K.tool].name + ': take it off the tool wall';
+    return null;
+  }
+  function doCheck(b, cid, by) {
+    var J = jobAt(b); if (!diagnosing(J) || J.diag.done[cid] !== undefined) return null;
+    var f = finding(cid, J.car.fault); J.diag.done[cid] = f; J.diag.checks++; J.diag.p = 0; sfx('beep');
+    toast((by && by !== 'player' ? by + ': ' : '') + f, ''); logEvent(J.car.name + "'s " + J.car.make + ': ' + f, '');
+    screenDirtyAll(); hudDirty = true; return f;
+  }
+  // naming the fault prices the job and its steps begin. A bonnet opened for the checks stays open for a job that works under it,
+  // and is shut for one that does not
+  function nameFault(b, fid, by) {
+    var J = jobAt(b); if (!diagnosing(J)) return 'nothing to name'; if (candList(J).indexOf(fid) < 0) return 'not one of the answers';
+    var D = J.diag; D.named = fid; D.namedAfter = D.checks; J.faults = [fid]; J.step = 0; J.stepP = 0; J.hold = null; if (G.hold && G.hold.bay === b) G.hold = null;
+    var pr = priceFor(jobFaults(J)); J.price = J.comeback ? 0 : pr.total; J.parts = J.comeback ? 0 : pr.parts;
+    if (J.vis && J.vis.open && !stepsOf(J).some(function (s) { return s.fx === 'open'; })) stepFx(b, 'shut');
+    skipOpen(J); sfx('ok');
+    toast((by && by !== 'player' ? by + ' says it is ' : 'Job card, bay ' + (b + 1) + ': ') + faultById(fid).job + ' for ' + money(J.price) + '.', 'good');
+    logEvent((by && by !== 'player' ? by + ' named' : 'Named') + ' the fault on ' + J.car.name + "'s " + J.car.make + ': ' + faultById(fid).job + '.', '');
+    screenDirtyAll(); hudDirty = true; return '';
+  }
+  // an Open the bonnet step with the bonnet already up is done already
+  function skipOpen(J) { var s = curStep(J); while (s && s.fx === 'open' && J.vis && J.vis.open) { J.step++; s = curStep(J); } }
+  // the last step done on a wrong name: started up, the car still does it. The part fitted is lost (the invoice never carries it), the
+  // name is crossed off and the job goes back to finding the fault; with one answer left, it is named for you
+  function wrongFix(b, by) {
+    var J = jobAt(b), D = J.diag, F = faultById(D.named), lost = 0, names = [];
+    (F.parts || []).forEach(function (p) { if (PARTS[p]) { lost += PARTS[p].cost; names.push(PARTS[p].name); } });
+    D.wrong.push(D.named); D.named = null; J.doneExtra = (J.doneExtra || []).concat(J.faults.slice(1)); J.faults = []; J.step = 0; J.stepP = 0; J.hold = null; J.vis = {}; carVis(b);
+    var pr = priceFor(jobFaults(J)); J.price = J.comeback ? 0 : pr.total; J.parts = J.comeback ? 0 : pr.parts;
+    S.stats.wrong = (S.stats.wrong || 0) + 1; sfx('bad');
+    toast('Started it up, and it still does it: it was not ' + F.job + '.' + (lost ? ' The ' + names.join(' and ') + ' cost ' + money(lost) + ', and the customer will not pay for ' + (names.length > 1 ? 'them' : 'it') + '.' : ''), 'bad');
+    logEvent('Wrong: ' + J.car.name + "'s " + J.car.make + ' did not need ' + F.job + (by && by !== 'player' && by !== 'dev' ? ' (' + by + ')' : '') + '.' + (lost ? ' ' + money(lost) + ' of parts wasted.' : ''), 'bad');
+    var left = candList(J); if (left.length === 1) nameFault(b, left[0], 'player');
+    screenDirtyAll(); hudDirty = true;
+  }
+  // right first time after at least one check: a little XP, and the books count it
+  function diagRight(J) {
+    var D = J.diag; if (!D || D.cands.length < 2 || D.wrong.length || !D.namedAfter) return;
+    S.stats.diagRight = (S.stats.diagRight || 0) + 1; addXp(5); logEvent('Right first time on ' + J.car.name + "'s " + J.car.make + '.', 'good');
+  }
+  // holding E at a check: it fills while you stay at the car
+  function checkTick(H, dt) {
+    var J = jobAt(H.bay); if (!diagnosing(J) || J.diag.done[H.check] !== undefined) { G.hold = null; return; }
+    if (!player.keys.KeyE || !nearCar(H.bay, 3.4)) { G.hold = null; J.diag.p = 0; screenDirtyAll(); return; }
+    J.diag.p += dt / CHECKS[H.check].secs;
+    if (worldTime - (G.lastClank || 0) > 0.9) { G.lastClank = worldTime; sfx('click'); }
+    if (J.diag.p >= 1) { G.hold = null; doCheck(H.bay, H.check, 'player'); }
+    hudDirty = true;
+  }
+  // a place on the car while the fault is being found: the bonnet opens freely, the other places offer their check. The open bonnet's
+  // box covers the engine bay, so it offers to shut only once no check is left under it (naming the fault shuts it when the job needs)
+  function bayCheckLeft(J) { return checksFor(J).some(function (cid) { return PLACES[CHECKS[cid].at].bay; }); }
+  function diagPrompt(b, at) {
+    var J = jobAt(b); if (J.assign && staffById(J.assign)) return '';
+    if (at === 'bonnet') return J.vis && J.vis.open ? (bayCheckLeft(J) ? '' : 'Shut the bonnet') : 'Open the bonnet';
+    var cid = checkAt(J, at); if (!cid) return '';
+    var why = checkBlock(b, cid); if (why) return CHECKS[cid].label + ': ' + why;
+    return 'Hold E: ' + CHECKS[cid].label + (G.hold && G.hold.check === cid && J.diag.p > 0 ? ' · ' + Math.round(J.diag.p * 100) + '%' : '');
+  }
+  function diagUse(b, at) {
+    var J = jobAt(b); if (J.assign && staffById(J.assign)) return;
+    if (at === 'bonnet') { if (J.vis && J.vis.open && bayCheckLeft(J)) return; J.by = 'player'; stepFx(b, J.vis && J.vis.open ? 'shut' : 'open'); sfx('door'); screenDirtyAll(); return; }
+    var cid = checkAt(J, at); if (!cid) return;
+    var why = checkBlock(b, cid); if (why) { toast(CHECKS[cid].label + ': ' + why + '.', 'bad'); return; }
+    J.by = 'player'; J.diag.p = 0; G.hold = { bay: b, check: cid, at: at };
+  }
+  // what the job card, the clipboard and the prompts call a job: its name, or what it could be while the fault is being found
+  function jobLabel(J) { return unnamed(J) ? 'find the fault (' + shortList(candList(J)) + ')' : jobName(J); }
+
   // ── The car's moving parts ────────────────────────────────────────
-  // the engine's car is one body; the bonnet's bump is swapped for an engine bay with a lid on a hinge, and each place gets its box
+  // the car (02-car.js) carries its own engine bay, bonnet, jack, drain pan and every part a job moves; here each place on it gets the
+  // box you look at
   function carParts(b, C) {
-    var g = C.g, paint = g.userData.paint, bump = g.children[2]; if (bump) bump.visible = false;
-    var bay = new THREE.Group(); bay.userData.dynamic = true; g.add(bay); C.bayParts = bay;
-    box(1.0, 0.28, 0.04, paint, 1.6, 0.9, 0.78, bay); box(1.0, 0.28, 0.04, paint, 1.6, 0.9, -0.78, bay); box(0.04, 0.28, 1.6, paint, 2.08, 0.9, 0, bay); box(0.04, 0.2, 1.6, MAT.black, 1.12, 0.96, 0, bay);
-    box(0.95, 0.04, 1.5, MAT.black, 1.6, 0.8, 0, bay); box(0.55, 0.24, 0.7, MAT.steelDark, 1.55, 0.94, 0, bay);
-    cyl(0.04, 0.04, MAT.yellow, PLACES.cap.p[0], 1.08, PLACES.cap.p[2], bay, 10); box(0.02, 0.1, 0.02, MAT.yellow, 1.75, 1.08, -0.18, bay);
-    C.battery = box(0.3, 0.2, 0.22, MAT.black, PLACES.battery.p[0], 0.98, PLACES.battery.p[2], bay); box(0.34, 0.14, 0.28, MAT.steelDark, PLACES.airbox.p[0], 0.98, PLACES.airbox.p[2], bay);
-    box(0.14, 0.16, 0.14, std({ color: 0xe8f4f0, roughness: 0.3, transparent: true, opacity: 0.8 }), PLACES.coolant.p[0], 0.98, PLACES.coolant.p[2], bay);
-    // the lid: hinged at the windscreen end, it lifts at the front
-    C.lid = new THREE.Group(); C.lid.position.set(1.1, 1.05, 0); g.add(C.lid); C.lid.userData.dynamic = true;
-    box(1.04, 0.04, 1.64, paint, 0.52, 0, 0, C.lid);
-    // the jack under the sill, the drain pan under the sump, both on the floor (they stay down while the car goes up)
-    C.jackMesh = new THREE.Group(); C.jackMesh.visible = false; g.add(C.jackMesh); box(0.24, 0.1, 0.6, std({ color: 0xc8342a, roughness: 0.45, metalness: 0.3 }), 0, 0.05, 0, C.jackMesh); cyl(0.05, 0.22, MAT.steel, 0, 0.2, 0, C.jackMesh, 10); C.jackMesh.position.set(PLACES.jack.p[0], 0, 0.75);
-    C.pan = box(0.6, 0.1, 0.5, MAT.black, PLACES.sump.p[0], 0.05, 0.55, g); C.pan.visible = false;
+    var g = C.g, P = g.userData.parts; C.parts = P; C.lid = P.lid; C.jackMesh = P.jack; C.pan = P.pan; C.battery = P.battery;
     C.looseWheel = g.userData.wheels && g.userData.wheels[0];
     C.places = {};
     Object.keys(PLACES).forEach(function (at) { var P = PLACES[at]; if (!P.p) return; var m = hitBox(P.s[0], P.s[1], P.s[2], P.p[0], P.p[1], P.p[2], { gc: { bay: b, at: at }, prompt: function () { return placePrompt(b, at); }, use: function () { placeUse(b, at); } }, g); C.places[at] = m; });
   }
-  // what the car looks like now: lid, jack, pan, wheel. J.vis is the save's copy so a reload puts it back as it was
-  function carVis(b) {
-    var C = carIn(b), J = jobAt(b); if (!C || !J) return; var v = J.vis || {};
-    var h = carHeight(b), onLift = J.lift !== null && J.lift !== undefined;
-    C.lid.rotation.z = v.open ? 1.05 : 0; C.g.position.y = h; C.jackMesh.visible = !!v.up && !onLift; C.jackMesh.position.y = -h;
-    C.pan.visible = !!v.pan; C.pan.position.y = 0.05 - h;
-    if (C.looseWheel) C.looseWheel.visible = !v.wheelOff;
-    shadowDirty = true;
-  }
-  function workRestore(b) { carVis(b); }
+  // what the car looks like now: its height, the jack and the pan at once, and the moving parts on their way (gcCarAnimate eases them
+  // every tick). J.vis is the save's copy, so a reload puts it all back as it was, at once
+  function carVis(b) { gcCarAnimate(b, 0, false); shadowDirty = true; }
+  function workRestore(b) { gcCarAnimate(b, 0, true); shadowDirty = true; }
   function stepFx(b, fx) {
     var J = jobAt(b); if (!J || !fx) return; var v = J.vis || (J.vis = {});
     if (fx === 'up') v.up = true; else if (fx === 'down') v.up = false; else if (fx === 'open') v.open = true; else if (fx === 'shut') v.open = false;
@@ -126,7 +220,8 @@
   }
   function verb(s) { return s.act === 'hold' || s.act === 'fill' ? 'Hold E: ' : ''; }
   function placePrompt(b, at) {
-    var J = jobAt(b), s = curStep(J); if (!s || s.at !== at) return '';
+    var J = jobAt(b); if (diagnosing(J)) return diagPrompt(b, at);
+    var s = curStep(J); if (!s || s.at !== at) return '';
     if (s.act === 'fetch') return '';
     var why = stepBlock(b, s); if (why) return s.label + ': ' + why;
     if (s.act === 'fill') return verb(s) + s.label + ' · ' + fillText(J);
@@ -134,7 +229,8 @@
   }
   function fillText(J) { var p = J.stepP || 0; return p < 0.9 ? 'level ' + Math.round(p * 100) + '%' : p <= 1.1 ? 'at the mark: let go' : 'over the mark: ' + Math.round(p * 100) + '%'; }
   function placeUse(b, at) {
-    var J = jobAt(b), s = curStep(J); if (!s || s.at !== at) return;
+    var J = jobAt(b); if (diagnosing(J)) { diagUse(b, at); return; }
+    var s = curStep(J); if (!s || s.at !== at) return;
     var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; }
     J.by = 'player';
     if (s.act === 'press' || s.act === 'wheel') { if (s.act === 'wheel' && S.hand && S.hand.kind === 'wheel') S.hand = null; doStep(b, 'player'); return; }
@@ -144,6 +240,7 @@
   // keep holding: let go between 90 and 110 percent, or let a little out (hold again) and try once more
   function workTick(dt) {
     var H = G.hold; if (!H) return;
+    if (H.check) { checkTick(H, dt); return; }
     var J = jobAt(H.bay), s = curStep(J);
     if (!s || J.step !== H.step) { G.hold = null; return; }
     var here = s.at === 'tyre' ? nearTyre(3.2) : nearCar(H.bay, 3.4);
@@ -167,8 +264,9 @@
     stepFx(b, s.fx);
     if (s.fx === 'wheeloff' && by === 'player' && stepsOf(J).slice(J.step + 1).some(function (x) { return x.at === 'tyre'; })) S.hand = { kind: 'wheel', bay: b, label: J.car.name + "'s wheel" };
     J.step++; J.stepP = 0; J.over = false; J.hold = null; addXp(1);
-    if (J.step >= stepsOf(J).length) jobFinished(b, by);
-    else { var n = curStep(J); if (by === 'player' && n) toast('Next: ' + n.label + ' (' + placeName(n.at) + ').', ''); }
+    // the last step: start it up. A wrong name shows now (finding the fault, above)
+    if (J.step >= stepsOf(J).length) { if (J.diag && J.diag.named && J.diag.named !== J.car.fault) wrongFix(b, by); else { diagRight(J); jobFinished(b, by); } }
+    else { skipOpen(J); var n = curStep(J); if (by === 'player' && n) toast('Next: ' + n.label + ' (' + placeName(n.at) + ').', ''); }
     screenDirtyAll(); hudDirty = true; return true;
   }
   // the parts for a fetch step come off the shelves; short of one, the job waits on it (the card and the PC say what)

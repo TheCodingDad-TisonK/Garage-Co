@@ -41,9 +41,13 @@ Everything earns XP; every fifth level the building grows, free, overnight, as i
 - **Weather and seasons.** Rain brings breakdowns and wet-weather jobs; winter brings tyres and batteries; summer brings air-con.
 - **The town.** Grow Co's city kit outside the fence: the road, parked cars, pedestrians, the lap round the block.
 
-## Where it stands (v0.2.2)
+## Where it stands (v0.3.1)
 
-The lock-up plays end to end: one bay, one car at a time, four faults (oil, brakes, bulb, battery) from the `FAULTS` table, the customer at the desk, the job card on the bench, the roll door panel, XP and levels, and the town laid out in the editor with traffic on the road network. Two things are thin. The work itself is standing at the car while a bar fills. Rep starts at 10, goes up by one per paid job, and nothing in the game reads it. The next update is in two parts: the shop (more room, workers) and the system (more jobs, real hands-on work, stock and a PC to run it all).
+The lock-up plays end to end and grows into the two-bay garage at level 5. There are twelve jobs, each worked step by step at the car with tools off the wall. Stock sits on the shelves and the PC orders more. The parts van comes, and the tyre corner and the stores shed can be bought. Three staff roles can be hired. Rep sets how often cars come and what labour pays. A lift takes the car you drive onto it.
+
+What it does not have is the part the pitch opens with: finding the fault. The customer's symptom names the job outright, so every car is a recipe to follow and the player can never get one wrong. The next update, diagnosis, puts that in (below). After it, the ladder still stops at level 7: nothing opens past it, and the workshop at level 10 has no plan beyond the ladder table.
+
+(Before v0.3, this section read: one bay, four faults, the work a bar that fills, rep that nothing reads. The two update sections below are what v0.3.0 shipped.)
 
 ## The next update: the shop
 
@@ -128,6 +132,60 @@ Tyson, 2026-10-11: the customer parks in the bay outside and walks to the desk; 
 
 Tyson asked for all of it in one release, so v0.3.0 carries every part of this update: the PC and stock, the step-by-step work with the tools, the twelve jobs, rep that does something, more room (the tyre corner, the stores shed, the two-bay garage), the workers, and the lift you drive onto. The two-bay garage grows in place: it is built into the lock-up's own world item off the east wall, so the town Tyson laid out stays as it is, and an editor move of the lock-up takes the new hall with it. Anything placed where the new hall stands (the front fence on that side) is cleared the night it grows. `tests/lockup.smoke.js`, `tests/systems.smoke.js` and `tests/garage2.smoke.js` cover it: 134 checks.
 
+## The next update: diagnosis
+
+Tyson, 2026-10-12: the pitch says you find the fault, and v0.3 never asks you to. Loop step 3 (Diagnose) and the reader on the ladder's first row were left out of the v0.3 sections. This update makes the fault something you work out.
+
+### What the customer says is a symptom, not a job
+
+A car has a hidden true fault and a symptom the customer describes. Symptoms are their own table (`SYMPTOMS`), and each names the faults it could be. Some point to one fault ("The left headlight is out"). Others point to several:
+
+| What the customer says | It could be |
+|---|---|
+| It struggles to start in the mornings | a worn-out battery, a loose battery terminal, worn spark plugs |
+| It feels sluggish and it drinks fuel | a clogged air filter, worn spark plugs |
+| It makes a horrible noise when I brake | worn pads, scored discs and pads |
+| Something is not right with the front tyre | a puncture, a tyre worn to the cord |
+
+The rest (the oil light, the headlight, smearing wipers, a tyre that keeps going flat, a misfire, running hot, a rattle underneath) point to one job each.
+
+- **Only the faults open at your level count.** At level 1 only the starting trouble is a puzzle (the battery or the terminal). Spark plugs join it at level 3, new tyres at 5, discs at 6. A symptom with one open fault is named at the desk as before, so the simple jobs stay quick.
+- **A new job: a loose battery terminal** (level 1). It needs no part: clean it and do it up with the spanner. It exists to sit next to the expensive answer. Fit a battery to a car that only had a loose terminal and that battery is gone.
+
+### Checks
+
+- Taking a job that could be more than one thing opens it as **find the fault**. The job card lists what it could be and the checks that would tell those apart.
+- A check is a hold of E at a place on the car, like a step:
+  - **Read the codes.** The code reader, a new tool on the tool wall that the lock-up has from the start, goes into the socket under the dash. A misfire code points to the plugs, an air-flow code to the air filter, and no codes to neither.
+  - **Test the battery.** The reader on the battery, with the bonnet up. It reads worn out, healthy with a loose terminal, or healthy.
+  - **Look at the air filter.** Bonnet up, open the air box.
+  - **Look at the brake** through the wheel: thin pads on a smooth disc, or pads down to the metal on a scored disc.
+  - **Look over the tyre:** a screw in the tread, or worn to the cord.
+- Only the checks that would tell the remaining answers apart are offered. Each says what it found, in words, and the card keeps the findings. The game does not cross answers off for you: you read the findings and decide.
+
+### Naming the fault
+
+- Each possible answer has a button on the job card and on the clipboard. Naming one prices the job (labour plus parts, as the invoice always did) and the steps begin.
+- You may name it without a single check. That is the gamble: quicker when you are right.
+- **Wrong costs a part and time.** At the last step you start the car and it still does it. The part you fitted is gone and the customer does not pay for it. The wrong answer is crossed off the card, and the job goes back to finding the fault with the clock still running toward the promised time. When only one answer is left it is named for you. The guess itself costs no rep; being late does, as before.
+- Right first time, after at least one check, earns 5 XP more. The Books app counts the right calls and the wrong ones.
+- The upsell waits until the fault is named.
+
+### Staff
+
+- **The mechanic can find a fault:** they walk to each check that still tells the answers apart, then name what is left. A low-skill mechanic sometimes names one without checking (skill 1: two jobs in five; skill 2: one in five).
+- **The apprentice cannot.** A car still being diagnosed waits for you or the mechanic. Once it is named, the apprentice can do its steps as before.
+
+### Saves
+
+A save from 0.3 keeps its jobs as named, since the fault was known when they were taken, and the reader goes up on its tool wall.
+
+### Later, not in this update
+
+- A better reader on the PC that reads more from the socket (the battery, the coolant).
+- The test drive round the block as the check at the end of a job (loop step 6), instead of starting the car in the bay.
+- Faults that only show on the road.
+
 ## What the engine gives, what is new
 
 Engine as of M2: the world kit, props and build mode, doors, people, screens, the hand-held device, the vehicle meshes and the drivable-vehicle core, lane traffic, the yard and the town kit, weather, saves, the shell, the dev console, the editor.
@@ -150,5 +208,6 @@ Comparable to Depot Co at 1.21: about twenty-five levels, five buildings, six ro
 - More room: the two-bay garage grows in place in v0.3.0. Does the workshop (level 10) move to a bigger plot in town, or keep growing here?
 - Steps go in a fixed order in v0.3.0 (the card always knows the next one). Any order that works, later?
 - Workers are paid by the day in v0.3.0. By the job instead?
-- How hard should diagnosis be? A puzzle with a wrong-guess cost, or a timer you buy down with better tools?
+- How hard should diagnosis be? A puzzle with a wrong-guess cost, or a timer you buy down with better tools? Answered for the diagnosis update (2026-10-12): a puzzle with a wrong-guess cost. The findings are words you read, and a wrong guess costs the part and the time. Better tools that cut the checks down stay open, as the better reader.
+- What comes after level 7? Nothing opens past it yet, and the workshop (level 10) has only its ladder row.
 - Does the player drive on the road, or only on the forecourt and the lap? The town kit allows both.

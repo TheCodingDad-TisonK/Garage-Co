@@ -28,23 +28,42 @@
     discs: { name: 'brake disc pair', cost: 40, sell: 80, lvl: 6, col: 0x6a6f75 }
   };
   CO.table('PARTS', PARTS, 'the supplier catalogue: what a part costs you, what it sells for on the invoice, the level it opens');
-  // the jobs a car comes in with, opened by level: what the customer says, the job, the parts, the labour price, and what the shop needs
-  // (needs: an upgrade or a tool bought on the PC). The steps of each job are in 02-work.js
+  // the faults a car can have, opened by level: the job, its short name on the job card's buttons, the parts, the labour price, and
+  // what the shop needs (needs: an upgrade or a tool bought on the PC). The steps of each job are in 02-work.js, the checks that find
+  // it there too. What the customer says is a symptom (below), and a symptom can be more than one fault
   var FAULTS = [
-    { id: 'oil', symptom: 'The oil light has been on since Tuesday.', job: 'an oil and filter change', parts: ['oil', 'oilfilter'], price: 45, lvl: 1 },
-    { id: 'brakes', symptom: 'It squeals every time I brake.', job: 'new front brake pads', parts: ['pads'], price: 70, lvl: 1 },
-    { id: 'bulb', symptom: 'The left headlight is out.', job: 'a headlight bulb', parts: ['bulb'], price: 12, lvl: 1 },
-    { id: 'battery', symptom: 'It would not start this morning.', job: 'a new battery', parts: ['battery'], price: 25, lvl: 1 },
-    { id: 'wipers', symptom: 'It smears all over the glass in the rain.', job: 'new wiper blades', parts: ['wipers'], price: 10, lvl: 2 },
-    { id: 'puncture', symptom: 'The front tyre keeps going flat.', job: 'a puncture repair', parts: ['plugkit'], price: 25, lvl: 2, needs: 'tyre' },
-    { id: 'airfilter', symptom: 'It feels sluggish and it drinks fuel.', job: 'a new air filter', parts: ['airfilter'], price: 15, lvl: 3 },
-    { id: 'plugs', symptom: 'It misfires when I pull away.', job: 'new spark plugs', parts: ['plugs'], price: 40, lvl: 3, needs: 'socket' },
-    { id: 'coolant', symptom: 'It runs hot in traffic.', job: 'a coolant top-up', parts: ['coolant'], price: 20, lvl: 4 },
-    { id: 'newtyre', symptom: 'The front tyre is worn down to the cord.', job: 'a new front tyre', parts: ['tyre'], price: 30, lvl: 5, needs: 'tyremachine' },
-    { id: 'exhaust', symptom: 'It rattles underneath and it is loud.', job: 'a new exhaust section', parts: ['exhaust'], price: 60, lvl: 5 },
-    { id: 'discs', symptom: 'It grinds when I brake.', job: 'new front discs and pads', parts: ['discs', 'pads'], price: 90, lvl: 6 }
+    { id: 'oil', short: 'oil change', job: 'an oil and filter change', parts: ['oil', 'oilfilter'], price: 45, lvl: 1 },
+    { id: 'brakes', short: 'brake pads', job: 'new front brake pads', parts: ['pads'], price: 70, lvl: 1 },
+    { id: 'bulb', short: 'bulb', job: 'a headlight bulb', parts: ['bulb'], price: 12, lvl: 1 },
+    { id: 'battery', short: 'battery', job: 'a new battery', parts: ['battery'], price: 25, lvl: 1 },
+    { id: 'terminal', short: 'terminal', job: 'a loose battery terminal', parts: [], price: 15, lvl: 1 },
+    { id: 'wipers', short: 'wipers', job: 'new wiper blades', parts: ['wipers'], price: 10, lvl: 2 },
+    { id: 'puncture', short: 'puncture', job: 'a puncture repair', parts: ['plugkit'], price: 25, lvl: 2, needs: 'tyre' },
+    { id: 'airfilter', short: 'air filter', job: 'a new air filter', parts: ['airfilter'], price: 15, lvl: 3 },
+    { id: 'plugs', short: 'spark plugs', job: 'new spark plugs', parts: ['plugs'], price: 40, lvl: 3, needs: 'socket' },
+    { id: 'coolant', short: 'coolant', job: 'a coolant top-up', parts: ['coolant'], price: 20, lvl: 4 },
+    { id: 'newtyre', short: 'new tyre', job: 'a new front tyre', parts: ['tyre'], price: 30, lvl: 5, needs: 'tyremachine' },
+    { id: 'exhaust', short: 'exhaust', job: 'a new exhaust section', parts: ['exhaust'], price: 60, lvl: 5 },
+    { id: 'discs', short: 'discs and pads', job: 'new front discs and pads', parts: ['discs', 'pads'], price: 90, lvl: 6 }
   ];
-  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: what the customer says, the parts, the labour price (price) and the level it opens');   // the editor's Settings tab tunes it
+  CO.table('FAULTS', FAULTS, 'the faults a car comes in with: the job, the parts, the labour price (price) and the level it opens');   // the editor's Settings tab tunes it
+  // what the customer says at the desk, and the faults it could be. Only the faults open at your level count: a symptom with one of
+  // them is named at the desk, one with more is a job you find the fault on first (02-work.js, the checks)
+  var SYMPTOMS = [
+    { id: 'oillight', says: 'The oil light has been on since Tuesday.', faults: ['oil'] },
+    { id: 'squeal', says: 'It squeals every time I brake.', faults: ['brakes'] },
+    { id: 'brakenoise', says: 'It makes a horrible noise when I brake.', faults: ['brakes', 'discs'] },
+    { id: 'headlight', says: 'The left headlight is out.', faults: ['bulb'] },
+    { id: 'nostart', says: 'It struggles to start in the mornings.', faults: ['battery', 'terminal', 'plugs'] },
+    { id: 'smear', says: 'It smears all over the glass in the rain.', faults: ['wipers'] },
+    { id: 'flat', says: 'The front tyre keeps going flat.', faults: ['puncture'] },
+    { id: 'tyre', says: 'Something is not right with the front tyre.', faults: ['puncture', 'newtyre'] },
+    { id: 'sluggish', says: 'It feels sluggish and it drinks fuel.', faults: ['airfilter', 'plugs'] },
+    { id: 'misfire', says: 'It misfires when I pull away.', faults: ['plugs'] },
+    { id: 'hot', says: 'It runs hot in traffic.', faults: ['coolant'] },
+    { id: 'rattle', says: 'It rattles underneath and it is loud.', faults: ['exhaust'] }
+  ];
+  CO.table('SYMPTOMS', SYMPTOMS, 'what a customer says at the desk (says) and the faults it could be (faults); two or more open faults make it a job to diagnose');
   var MAKES = ['Harlow Estate', 'Pennant 1.4', 'Kestrel Van', 'Dunmore Coupe', 'Alder Hatch', 'Brampton Saloon'];   // made-up makes, in the house look
   var NAMES = ['Mrs Okafor', 'Dan', 'Priya', 'Mr Holt', 'Lena', 'Sam', 'Mr Baptiste', 'Ruth'];
   CO.setup({ canvas: 'co-canvas', save: 'garageco', game: GAME, spawn: { x: 0, z: -1, yaw: Math.PI }, sun: { box: 40, far: 120, mapSize: 2048, target: [0, 0, 8] }, lightBudget: 8 });
@@ -64,6 +83,10 @@
   function deskStand(i) { var o = LO(); return { x: DESK_STAND.x + o.x + (i || 0) * 0.9, z: DESK_STAND.z + o.z + (i || 0) * 0.3 }; }
   function faultById(id) { return FAULTS.filter(function (f) { return f.id === id; })[0] || FAULTS[0]; }
   function faultOf(car) { return faultById(car.fault); }
+  // what the car's customer says: its own symptom, or (a car from before 0.4) the first one its fault shows as
+  function symptomById(id) { return SYMPTOMS.filter(function (s) { return s.id === id; })[0] || null; }
+  function symptomsFor(fid) { return SYMPTOMS.filter(function (s) { return s.faults.indexOf(fid) >= 0; }); }
+  function symptomOf(car) { return symptomById(car.sym) || symptomsFor(car.fault)[0] || { id: '', says: 'Something is not right with it.', faults: [car.fault] }; }
   GAME.floorY = function () { return 0; };
   // the plot around the lock-up: the ground you may walk on and where the editor may stand things. The forecourt can be widened and
   // the fence moved out in the editor, so the plot reaches well past both; walls and fences still stop you through their solids
@@ -213,13 +236,14 @@
   // the tool wall: the hand tools a job asks for hang on it (02-work.js has the list). E takes one off its hook or hangs the one in
   // your hand back; a hook you have taken from shows its painted outline. Tools the shop has not bought yet are not on it
   defProp('toolWall', { label: 'tool wall', cat: 'garage', wall: true, x: 1.5, z: -3.83, rot: 0, build: function (c) {
-    c.box(2.4, 1.2, 0.04, MAT.wood, 0, 1.5, 0); for (var i = 0; i < 5; i++) { var x = 0.15 + i * 0.22; c.cyl(0.012, 0.3, MAT.steel, x, 1.75 - (i % 3) * 0.12, 0.05, 6); c.box(0.06, 0.05, 0.03, MAT.rubber, x, 1.62 - (i % 3) * 0.12, 0.05); }
+    c.box(2.4, 1.2, 0.04, MAT.wood, 0, 1.5, 0); for (var i = 0; i < 4; i++) { var x = 0.4 + i * 0.22; c.cyl(0.012, 0.3, MAT.steel, x, 1.75 - (i % 3) * 0.12, 0.05, 6); c.box(0.06, 0.05, 0.03, MAT.rubber, x, 1.62 - (i % 3) * 0.12, 0.05); }
     c.sign(['TOOLS', 'put it back where you found it'], 1.4, 0.3, 0, 2.3, 0.03, 0, { bg: '#1b232c' });
     var dg = c.dynGroup(); G.toolHooks = {};
     TOOL_IDS.forEach(function (t, k) {
       var x = -1.0 + k * 0.28, T = TOOLS[t], hook = new THREE.Group(); hook.position.set(x, 1.5, 0.05); dg.add(hook);
-      box(0.2, 0.5, 0.005, std({ color: 0xf5f1e6, roughness: 1 }), 0, 0, -0.012, hook);   // the painted outline
-      var tool = new THREE.Group(); hook.add(tool); box(0.04, T.len, 0.03, T.mat || MAT.chrome, 0, 0, 0, tool); box(T.headW || 0.1, 0.06, 0.04, MAT.steelDark, 0, T.len / 2, 0, tool);
+      box(0.2, 0.5, 0.005, std({ color: 0x2a2e34, roughness: 1 }), 0, 0, -0.012, hook);   // the painted outline
+      cyl(0.006, 0.05, MAT.steelDark, 0, 0.2, 0.01, hook, 6).rotation.x = Math.PI / 2;      // the peg it hangs from
+      var tool = new THREE.Group(); hook.add(tool); tool.add(gcToolMesh(t));
       G.toolHooks[t] = { hook: hook, tool: tool };
       c.hit(0.24, 0.6, 0.12, x, 1.5, 0.06, { prompt: function () { return toolPrompt(t); }, use: function () { toolUse(t); } });
     });
@@ -230,7 +254,7 @@
     c.box(0.5, 0.25, 0.3, MAT.red, -0.6, 1.07, -0.1); c.box(0.3, 0.1, 0.2, MAT.black, 0.5, 0.99, 0.1); c.solid(-1.1, 1.1, -0.4, 0.4, 0, 1.0);
     // the job card: a small screen on a stand at the bench's end, drawn from the state
     c.box(0.06, 0.5, 0.06, MAT.steelDark, 0.95, 1.2, -0.3);
-    touchScreen({ w: 360, h: 240, pw: 0.6, ph: 0.4, x: 0.95, y: 1.6, z: -0.29, ry: 0, parent: c.group, title: 'Job card', draw: drawJobCard });
+    G.jobCard = touchScreen({ w: 360, h: 240, pw: 0.6, ph: 0.4, x: 0.95, y: 1.6, z: -0.29, ry: 0, parent: c.group, title: 'Job card', draw: drawJobCard });
   } });
   defProp('desk', { label: 'desk', cat: 'garage', x: DESK.x, z: DESK.z, rot: 0, build: function (c) {
     c.box(1.6, 0.06, 0.8, MAT.wood, 0, 0.78, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, -0.72, 0.38, 0); c.box(0.08, 0.75, 0.7, MAT.steelDark, 0.72, 0.38, 0); c.box(0.5, 0.6, 0.6, MAT.steelDark, 0.45, 0.3, 0);
@@ -247,8 +271,7 @@
   } });
   GAME.propAllowed = function (id) { return id !== 'officeDesk' || grown(); };
   defProp('jack', { label: 'trolley jack', cat: 'garage', x: 1.4, z: 1.2, rot: 0, build: function (c) {
-    c.box(0.3, 0.12, 0.7, CHROME_RED, 0, 0.1, 0); c.cyl(0.06, 0.1, MAT.steel, 0, 0.21, -0.1, 12); var h = c.cyl(0.015, 1.0, MAT.steelDark, 0, 0.55, 0.55, 6); h.rotation.x = 0.9;
-    [[0.13, -0.28], [-0.13, -0.28], [0.13, 0.3], [-0.13, 0.3]].forEach(function (p) { var w = c.cyl(0.05, 0.04, MAT.rubber, p[0], 0.05, p[1], 10); w.rotation.z = Math.PI / 2; });
+    var j = gcJackMesh(); j.position.z = -0.3; c.group.add(j);   // the same trolley jack that goes under the cars (02-car.js)
     c.solid(-0.2, 0.2, -0.4, 0.6, 0, 0.4);
   } });
   defProp('stands', { label: 'axle stands', cat: 'garage', x: 3.2, z: -2.8, rot: 0, build: function (c) {

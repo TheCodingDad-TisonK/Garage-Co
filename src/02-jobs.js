@@ -15,12 +15,16 @@
   function newCar(faultId) {
     var pool = faultsOpen(), f = faultId ? faultById(faultId) : pick(pool);
     var car = { id: uid('car'), make: pick(MAKES), col: pick(CAR_COLS), name: pick(NAMES), fault: f.id, plate: 'GC ' + randi(10, 99) + ' ' + pick(['AB', 'KH', 'NL', 'XY']) + randi(100, 999) };
-    // about a car in three has a second thing wrong that the customer did not mention: you spot it and offer it (the upsell)
-    var others = pool.filter(function (x) { return x.id !== f.id; });
+    // what the customer says: one of the symptoms the fault shows as (some of them could be another fault too)
+    var syms = symptomsFor(f.id); if (syms.length) car.sym = pick(syms).id;
+    // about a car in three has a second thing wrong that the customer did not mention: you spot it and offer it (the upsell). Never one
+    // of the answers its symptom could be, or the upsell would give the diagnosis away
+    var could = symptomOf(car).faults, others = pool.filter(function (x) { return x.id !== f.id && could.indexOf(x.id) < 0; });
     if (others.length && Math.random() < 0.33) car.extra = pick(others).id;
     return car;
   }
-  function jobFaults(J) { return J.faults || [J.car.fault]; }
+  // the faults on the invoice: the ones being worked, and a second fault already done before a wrong name sent the job back
+  function jobFaults(J) { return J.faults ? J.faults.concat(J.doneExtra || []) : [J.car.fault]; }
   function jobName(J) { return jobFaults(J).map(function (id) { return faultById(id).job; }).join(' and '); }
   function partsOf(faults) { var out = []; faults.forEach(function (id) { (faultById(id).parts || []).forEach(function (p) { out.push(p); }); }); return out; }
   // labour goes up with the name the garage has; parts go on the invoice at their selling price
@@ -30,7 +34,11 @@
   function carPrompt(b) {
     var J = jobAt(b); if (!J) return null;
     if (J.state === 'waiting') return 'Look at the ' + J.car.make + ': ' + J.car.name + ' is coming to the desk';
-    if (J.state === 'taken') { var s = curStep(J), onLift = J.lift !== null && J.lift !== undefined, drive = canDrive(b) ? '' : onLift ? ' · E: get in' : ' · E: drive it onto the lift'; return J.car.name + "'s " + J.car.make + ' · ' + jobName(J) + (s ? ' · next: ' + s.label + ' (' + placeName(s.at) + ')' : '') + drive; }
+    if (J.state === 'taken') {
+      var s = curStep(J), onLift = J.lift !== null && J.lift !== undefined, drive = canDrive(b) ? '' : onLift ? ' · E: get in' : ' · E: drive it onto the lift';
+      if (diagnosing(J)) { var ck = checksFor(J); return J.car.name + "'s " + J.car.make + ' · find the fault: ' + shortList(candList(J)) + (ck.length ? ' · check ' + ck.map(function (c) { return placeName(CHECKS[c].at); }).join(', ') : '') + ' · name it on the job card' + drive; }
+      return J.car.name + "'s " + J.car.make + ' · ' + jobName(J) + (s ? ' · next: ' + s.label + ' (' + placeName(s.at) + ')' : '') + drive;
+    }
     if (J.state === 'done') return 'Fixed. ' + J.car.name + ' pays at the desk';
     return J.car.name + "'s " + J.car.make;
   }
@@ -39,8 +47,9 @@
   // a car arrives on the road from the west, comes through the gap in the bollards, along the apron, and noses into its bay
   function spawnCar(b, car, comeback) {
     if (b === undefined || b === null) b = freeBay(); if (b < 0 || carIn(b)) return null;
-    car = car || newCar(); var faults = [car.fault], pr = priceFor(faults);
-    S.jobs[b] = { bay: b, car: car, faults: faults, state: 'coming', step: 0, stepP: 0, price: comeback ? 0 : pr.total, parts: comeback ? 0 : pr.parts, day: S.day, due: null, assign: null, vis: {}, comeback: !!comeback, offered: false };
+    // a symptom that can be only one open fault names the job at once; otherwise it is found at the car, and priced when it is named
+    car = car || newCar(); var diag = diagStart(car, comeback), faults = diag.named ? [diag.named] : [], pr = priceFor(faults);
+    S.jobs[b] = { bay: b, car: car, faults: faults, diag: diag, state: 'coming', step: 0, stepP: 0, price: comeback ? 0 : pr.total, parts: comeback ? 0 : pr.parts, day: S.day, due: null, assign: null, vis: {}, comeback: !!comeback, offered: false };
     placeCar(b, car, -78, ROAD_Z + LANE, 0, arrivePath(b));
     logEvent(comeback ? car.name + ' is coming back with the ' + car.make + '. Something is not right.' : car.name + ' is on the way in a ' + car.make + '.', comeback ? 'bad' : ''); hudDirty = true; screenDirtyAll();
     return car;
@@ -48,7 +57,7 @@
   function arrivePath(b) { var B = BAYS[b]; return [[ENTRY_X, ROAD_Z + LANE, 9], [ENTRY_X, APRON_Z, 3.5], [B.x, APRON_Z, 3.5], [B.x, B.z, 3]]; }
   function leavePath(b) { var B = BAYS[b], off = liftExit(b); return (off || [[B.x, APRON_Z, 3]]).concat([[ENTRY_X, APRON_Z, 3.5], [ENTRY_X, ROAD_Z + LANE, 3.5], [90, ROAD_Z + LANE, 10]]); }
   function placeCar(b, car, x, z, yaw, path) {
-    var g = carMesh({ col: car.col, plate: car.plate }); g.userData.dynamic = true; scene.add(g); g.position.set(x, 0, z); g.rotation.y = yaw;
+    var g = gcCar({ col: car.col, plate: car.plate }); g.userData.dynamic = true; scene.add(g); g.position.set(x, 0, z); g.rotation.y = yaw;
     var C = { rec: car, g: g, x: x, z: z, yaw: yaw, path: path || [], speed: 0, bay: b };
     bayOf(b).car = C;
     C.hit = hitBox(4.4, 1.5, 2.0, 0, 0.75, 0, { gcCar: b, prompt: function () { return carPrompt(b); }, use: function () { carUse(b); } }, g);
@@ -98,7 +107,7 @@
     var cu = { g: g, rec: rec, walking: false, at: atDesk ? 'desk' : 'car', goal: 'desk', car: car, bay: b };
     bayOf(b).customer = cu;
     cu.hit = hitBox(0.7, 1.9, 0.7, 0, 0.95, 0, { prompt: function () { return customerPrompt(b); }, use: function () { customerUse(b); } }, g);
-    if (!atDesk) { customerGo(b, 'desk'); say(g, (jobAt(b) && jobAt(b).comeback ? 'You again. ' : 'Morning. ') + faultOf(car).symptom); }
+    if (!atDesk) { customerGo(b, 'desk'); say(g, (jobAt(b) && jobAt(b).comeback ? 'You again. ' : 'Morning. ') + symptomOf(car).says); }
     return cu;
   }
   function customerGo(b, goal) { var c = customerIn(b), C = carIn(b); if (!c) return; c.goal = goal; c.walking = true; var to = goal === 'car' && C ? { x: C.x + 1.7, z: C.z } : deskStand(b); c.rec.path = route({ x: c.rec.x, z: c.rec.z }, to); }
@@ -106,8 +115,8 @@
   function customerPrompt(b) {
     var J = jobAt(b), c = customerIn(b); if (!J || !c) return null;
     if (c.walking) return J.car.name + (c.goal === 'desk' ? ' is coming to the desk' : ' is going back to the car');
-    if (J.state === 'waiting') return 'Take the job from ' + J.car.name + ': ' + faultOf(J.car).symptom + (J.comeback ? ' (a comeback: free)' : ' (' + money(J.price) + ')');
-    if (J.state === 'taken') return J.car.extra && !J.offered ? 'Offer ' + J.car.name + ' ' + faultById(J.car.extra).job + ' too (' + money(priceFor([J.car.extra]).total) + ')' : J.car.name + ' is waiting for the ' + J.car.make + (J.due ? ', promised for ' + fmtTime(J.due) : '');
+    if (J.state === 'waiting') return 'Take the job from ' + J.car.name + ': ' + symptomOf(J.car).says + (J.comeback ? ' (a comeback: free)' : unnamed(J) ? ' (it could be ' + shortList(candList(J)) + ': find the fault, then the price)' : ' (' + money(J.price) + ')');
+    if (J.state === 'taken') return J.car.extra && !J.offered && !unnamed(J) ? 'Offer ' + J.car.name + ' ' + faultById(J.car.extra).job + ' too (' + money(priceFor([J.car.extra]).total) + ')' : J.car.name + ' is waiting for the ' + J.car.make + (unnamed(J) ? ' while you find the fault' : '') + (J.due ? ', promised for ' + fmtTime(J.due) : '');
     if (J.state === 'done') return 'Take the payment: ' + money(J.price) + ' for ' + jobName(J);
     return J.car.name;
   }
@@ -115,7 +124,7 @@
     var J = jobAt(b), c = customerIn(b); if (!J || !c || c.walking) return;
     if (J.state === 'waiting') takeJob(b);
     else if (J.state === 'done') takePayment(b);
-    else if (J.state === 'taken') { if (J.car.extra && !J.offered) offerExtra(b); else say(c.g, 'Take your time. Well, not too much.'); }
+    else if (J.state === 'taken') { if (J.car.extra && !J.offered && !unnamed(J)) offerExtra(b); else say(c.g, unnamed(J) ? 'Any idea what it is yet?' : 'Take your time. Well, not too much.'); }
   }
   // a roll door rides up for anyone walking through it: the customers and the staff
   function someoneNear(dx) {
@@ -145,13 +154,13 @@
   function takeJob(b, by) {
     b = b || 0; var J = jobAt(b); if (!J || J.state !== 'waiting') return false;
     J.state = 'taken'; J.step = 0; J.stepP = 0; J.due = Math.min(CLOSE_AT, S.time + 1.5); sfx('ok');
-    toast('Job card, bay ' + (b + 1) + ': ' + jobName(J) + (J.comeback ? ' (a comeback, no charge)' : ' for ' + money(J.price)) + '. Promised for ' + fmtTime(J.due) + '.', 'good');
-    logEvent((by === 'staff' ? 'The desk took' : 'Took') + ' the job: ' + jobName(J) + ' on ' + J.car.name + "'s " + J.car.make + '.', 'good');
+    toast('Job card, bay ' + (b + 1) + ': ' + (unnamed(J) ? 'find the fault. It could be ' + shortList(candList(J)) + ': the job card says what to check' : jobName(J) + (J.comeback ? ' (a comeback, no charge)' : ' for ' + money(J.price))) + '. Promised for ' + fmtTime(J.due) + '.', 'good');
+    logEvent((by === 'staff' ? 'The desk took' : 'Took') + ' the job: ' + jobLabel(J) + ' on ' + J.car.name + "'s " + J.car.make + '.', 'good');
     if (customerIn(b)) say(customerIn(b).g, 'Great. I will wait here.'); screenDirtyAll(); hudDirty = true; return true;
   }
   // the upsell: you spotted something else; the customer says yes more often the better your name
   function offerExtra(b) {
-    var J = jobAt(b); if (!J || J.state !== 'taken' || !J.car.extra || J.offered) return false;
+    var J = jobAt(b); if (!J || J.state !== 'taken' || !J.car.extra || J.offered || unnamed(J)) return false;
     J.offered = true; var x = J.car.extra, f = faultById(x), pr = priceFor([x]), c = customerIn(b);
     if (Math.random() < 0.35 + S.rep * 0.0065) {
       J.faults.push(x); J.price += pr.total; J.parts += pr.parts; J.due = Math.min(CLOSE_AT, (J.due || S.time) + 1); J.hold = null;
@@ -163,7 +172,7 @@
   function jobFinished(b, by) {
     var J = jobAt(b); if (!J) return; J.state = 'done'; sfx('bell'); S.stats.fixed++; addXp(10);
     toast('Fixed: ' + jobName(J) + ' on ' + J.car.name + "'s " + J.car.make + '. Take the payment at the desk.', 'good'); logEvent('Fixed ' + jobName(J) + ' on the ' + J.car.make + (by && by !== 'player' ? ' (' + by + ')' : '') + '.', 'good');
-    if (J.sloppy) S.comebacks.push({ day: S.day + randi(1, 2), car: { id: J.car.id, make: J.car.make, col: J.car.col, name: J.car.name, fault: J.car.fault, plate: J.car.plate } });
+    if (J.sloppy) S.comebacks.push({ day: S.day + randi(1, 2), car: { id: J.car.id, make: J.car.make, col: J.car.col, name: J.car.name, fault: J.car.fault, sym: J.car.sym, plate: J.car.plate } });
     if (!customerIn(b)) { var cu = spawnCustomer(b, J.car, true); if (cu) say(cu.g, 'I have come for the ' + J.car.make + '.'); }
     if (S.hand && S.hand.bay === b) S.hand = null;
     screenDirtyAll(); hudDirty = true;
@@ -225,7 +234,7 @@
     for (var b = 0; b < S.jobs.length; b++) {
       var J = S.jobs[b]; if (!J) continue;
       if (b >= bayCount() || J.state === 'coming' || J.state === 'leaving' || J.state === 'paid') { if (S.hand && S.hand.bay === b) S.hand = null; S.jobs[b] = null; continue; }
-      if (!J.faults) J.faults = [J.car.fault]; if (!J.vis) J.vis = {}; if (J.step === undefined) J.step = 0; if (J.state === 'fixing') J.state = 'taken';
+      if (!J.faults) J.faults = [J.car.fault]; if (!J.diag) J.diag = diagStart(J.car, true); if (!J.vis) J.vis = {}; if (J.step === undefined) J.step = 0; if (J.state === 'fixing') J.state = 'taken';
       var onLift = J.lift !== null && J.lift !== undefined; if (onLift && !liftBuilt(J.lift)) { J.lift = null; onLift = false; }
       var at = onLift ? liftWorld(J.lift) : BAYS[b];
       placeCar(b, J.car, at.x, at.z, onLift && J.pos ? J.pos.yaw : Math.PI / 2, []); workRestore(b);
@@ -240,13 +249,25 @@
       var y = 50 + b * h, J = jobAt(b);
       if (!J) { scText(c, 16, y + 22, 'Bay ' + (b + 1) + ': no car in. The next one is on its way.', '#a0acb8', 13); continue; }
       scText(c, 16, y + 20, 'Bay ' + (b + 1) + ' · ' + J.car.make + ' · ' + J.car.plate, '#eef1f5', 14);
-      scText(c, 16, y + 38, J.car.name + ': ' + jobName(J), '#a0acb8', 12);
+      if (diagnosing(J)) { drawDiagCard(c, sc, b, J, y, h); continue; }
+      scText(c, 16, y + 38, J.car.name + ': ' + jobLabel(J), '#a0acb8', 12);
       var s = J.state === 'taken' ? curStep(J) : null, steps = stepsOf(J);
       scText(c, 16, y + 58, J.state === 'waiting' ? 'Customer at the desk' : s ? 'Step ' + (J.step + 1) + ' of ' + steps.length + ': ' + s.label + (J.stepP > 0 ? ' · ' + Math.round(Math.min(J.stepP, 1.5) * 100) + '%' : '') : J.state === 'done' ? 'Fixed: take ' + money(J.price) + ' at the desk' : J.state, J.state === 'done' ? '#5fd38d' : '#f5b53d', 13);
       if (J.hold === 'parts') scText(c, 16, y + 76, 'Waiting on parts: ' + missingParts(J).map(function (p) { return PARTS[p].name; }).join(', '), '#ff6b5e', 12);
       var cu = customerIn(b), here = cu && !cu.walking, bx = sc.w - 150;
       if (J.state === 'waiting' && here) scButton(sc, bx, y + 8, 134, 32, 'Take the job', true, takeJob.bind(null, b));
       if (J.state === 'done' && here) scButton(sc, bx, y + 8, 134, 32, 'Take payment', true, takePayment.bind(null, b));
-      if (J.state === 'taken' && J.car.extra && !J.offered && here) scButton(sc, bx, y + 8, 134, 32, 'Offer the extra', true, offerExtra.bind(null, b));
+      if (J.state === 'taken' && J.car.extra && !J.offered && !unnamed(J) && here) scButton(sc, bx, y + 8, 134, 32, 'Offer the extra', true, offerExtra.bind(null, b));
     }
+  }
+  // a bay whose fault is being found: what the customer said, the findings so far (or the checks to do), and a button an answer
+  function drawDiagCard(c, sc, b, J, y, h) {
+    var D = J.diag, w = sc.w - 32, found = CHECK_IDS.filter(function (k) { return D.done[k] !== undefined; }), lines = found.map(function (k) { return D.done[k]; });
+    c.font = '12px ' + SCREEN_THEME.font; scText(c, 16, y + 38, scFit(c, 'FIND THE FAULT · ' + J.car.name + ': ' + symptomOf(J.car).says, w), '#f5b53d', 12);
+    if (D.wrong.length) lines.unshift('Not ' + D.wrong.map(function (f) { return faultById(f).short; }).join(', not ') + ': tried, and it still did it.');
+    if (!found.length) { var ck = checksFor(J); lines.push(ck.length ? 'Check: ' + ck.map(function (k) { return CHECKS[k].label.toLowerCase(); }).join('; ') + '.' : 'No check tells them apart: name it.'); }
+    var room = Math.max(1, Math.floor((h - 80) / 15));
+    lines.slice(-room).forEach(function (t, i) { c.font = '12px ' + SCREEN_THEME.font; scText(c, 16, y + 54 + i * 15, scFit(c, t, w), '#eef1f5', 12); });
+    var list = candList(J), n = list.length, bw = (w - (n - 1) * 6) / n, mine = !(J.assign && staffById(J.assign));
+    list.forEach(function (f, i) { scButton(sc, 16 + i * (bw + 6), y + h - 32, bw, 26, faultById(f).short, mine, function () { nameFault(b, f, 'player'); }); });
   }
