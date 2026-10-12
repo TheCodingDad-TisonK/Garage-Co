@@ -121,7 +121,7 @@
     box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, -(FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75); box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, (FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75);
     // the bay: two white lines and an end mark; the second bay is marked out once the garage has grown
     box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x - 1.5, 0.01, BAY.z); box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x + 1.5, 0.01, BAY.z); box(3.0, 0.02, 0.1, MAT.whiteLine, BAY.x, 0.01, BAY.z - 2.7);
-    if (grown()) { var B2 = BAYS[1]; box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x + 1.5, 0.01, B2.z); box(3.0, 0.02, 0.1, MAT.whiteLine, B2.x, 0.01, B2.z - 2.7); sign(['BAY 2'], 1.2, 0.3, B2.x, 0.02, B2.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; }
+    if (grown()) { var B2 = BAYS[1]; box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x - 1.5, 0.01, B2.z); box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x + 1.5, 0.01, B2.z); box(3.0, 0.02, 0.1, MAT.whiteLine, B2.x, 0.01, B2.z - 2.7); sign(['BAY 2'], 1.2, 0.3, B2.x, 0.02, B2.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; sign(['BAY 1'], 1.2, 0.3, BAY.x, 0.02, BAY.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; }
     // the lock-up: a slab, block walls (the roll door opening in the south wall, the side door in the east wall), a roof and two skylights.
     // All of it is one world item, so the editor moves the building as a whole and the rules above follow it
     worldItem('lock-up', function () { G.lockup = WORLD_PARENT;
@@ -151,6 +151,10 @@
     hitBox(0.4, 1.4, 0.4, DW / 2 + 0.35, 1.5, Z - 0.22, { prompt: function () { return (S.doorOpen ? 'Pull the chain: close' : 'Pull the chain: open') + ' the roll door'; }, use: function () { S.doorOpen = !S.doorOpen; sfx(S.doorOpen ? 'unlock' : 'lock'); hudDirty = true; } });
     sign(['GARAGE CO.'], 4.2, 0.9, 0, H + 0.75, Z + 0.22, 0, { bg: '#1b232c' });
     buildLift(0);
+    // two invisible markers past either side wall, wider than the side door standing open: the item is centred on its outline when it
+    // is built and its world key ("lock-up@0,0") comes from that centre, so a door saved open must not move it. An open side door
+    // used to shift it to "lock-up@0.35,0", the editor's move of the lock-up no longer matched, and the building stood back at 0,0
+    [-1, 1].forEach(function (s) { box(0.02, 0.02, 0.02, MAT.black, s * (X + 1.5), 0.01, 0).visible = false; });
     }, null);
     if (G.lockup) { G.lockBase = { x: G.lockup.position.x, z: G.lockup.position.z }; G.lockup.userData.movesOnly = true; }   // the rules follow where it stands, not a turn or a new size
     if (G.lockup && grown()) buildHall2();
@@ -170,10 +174,15 @@
   // centred, so the item keeps its key and wherever the editor stood the lock-up the new hall stands beside it
   function buildHall2() {
     var g = G.lockup, b = G.lockBase, n0 = solids.length, prev = WORLD_PARENT, X0 = HALL2.x0, X1 = HALL2.x1, Z = LOCKUP.z, H = LOCKUP.h, DW = LOCKUP.doorW, DH = LOCKUP.doorH, cx = (X0 + X1) / 2, W = X1 - X0;
+    // everything below is written in the lock-up's frame as it was built; bx and the inner group take off the item's centring (b), so a
+    // box, a lining and a prop all land where the numbers say
+    var inner = new THREE.Group(); inner.position.set(-b.x, 0, -b.z); g.add(inner);
     WORLD_PARENT = g;
     try {
       var bx = function (w, h, d, mat, x, y, z) { return box(w, h, d, mat, x - b.x, y, z - b.z); };
+      var cl = function (r, h, mat, x, y, z, seg) { return cyl(r, h, mat, x - b.x, y, z - b.z, null, seg || 14); };
       var sol = function (x0, x1, z0, z1) { solid(x0, x1, z0, z1); };
+      var glass = std({ color: 0xa8c8dc, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.32 }), frame = std({ color: 0x2b3036, roughness: 0.5, metalness: 0.4 });
       var slab = plane(W, 2 * Z, MAT.floor, cx - b.x, 0.01, -b.z, -Math.PI / 2); slab.receiveShadow = true;
       bx(W + 0.3, H, 0.3, MAT.block, cx, H / 2, -Z); sol(X0, X1 + 0.15, -Z - 0.15, -Z + 0.15);
       bx(0.3, H, 2 * Z + 0.3, MAT.block, X1, H / 2, 0); sol(X1 - 0.15, X1 + 0.15, -Z - 0.15, Z + 0.15);
@@ -181,41 +190,95 @@
       bx(d0 - X0, H, 0.3, MAT.block, (X0 + d0) / 2, H / 2, Z); bx(X1 - d1, H, 0.3, MAT.block, (d1 + X1) / 2, H / 2, Z); bx(DW + 0.4, H - DH, 0.3, MAT.block, HALL2.doorX, DH + (H - DH) / 2, Z);
       sol(X0, d0, Z - 0.15, Z + 0.15); sol(d1, X1 + 0.15, Z - 0.15, Z + 0.15);
       bx(W + 0.6, 0.25, 2 * Z + 0.6, MAT.roof, cx, H + 0.125, 0); plane(W, 2 * Z, MAT.roofIn, cx - b.x, H - 0.01, -b.z, Math.PI / 2);
-      // windows high on the long walls: light in, no view of the street at eye height
+      // daylight: two skylights in the roof, and a row of three windows high in the back wall, framed and glazed inside and out
       [cx - 2.5, cx + 2.5].forEach(function (x) { var sk = plane(1.6, 1.2, MAT.skylight, x - b.x, H - 0.02, -1 - b.z, Math.PI / 2); lampMeshes.push(sk); });
-      [cx - 3, cx, cx + 3].forEach(function (x) { bx(1.6, 0.5, 0.06, MAT.skylight, x, H - 0.55, -Z + 0.17); });
+      [cx - 3, cx, cx + 3].forEach(function (x) {
+        [-1, 1].forEach(function (s) {
+          var z = -Z + s * 0.17; bx(1.6, 0.5, 0.02, s > 0 ? MAT.skylight : glass, x, H - 0.75, z + s * 0.01);
+          bx(1.7, 0.06, 0.05, frame, x, H - 0.47, z + s * 0.02); bx(1.7, 0.06, 0.05, frame, x, H - 1.03, z + s * 0.02);
+          [-0.82, 0, 0.82].forEach(function (dx) { bx(0.05, 0.56, 0.05, frame, x + dx, H - 0.75, z + s * 0.02); });
+        });
+      });
       [-1.5, 1.5].forEach(function (z) { bx(W - 0.4, 0.3, 0.2, MAT.steelDark, cx, H - 0.25, z); });
       [[cx - 2.5, -1.5], [cx + 2.5, 1.5]].forEach(function (p) { highBay(p[0] - b.x, H - 0.95, p[1] - b.z, H); var l = new THREE.PointLight(0xffeacc, 0.6, 14, 2); l.position.set(p[0] - b.x, H - 1.2, p[1] - b.z); g.add(l); G.lamps.push(l); });
       // the roll door onto bay 2, on a chain like the first
       G.roll2 = new THREE.Group(); G.roll2.userData.dynamic = true; G.roll2.position.set(HALL2.doorX - b.x, 0, Z - b.z); g.add(G.roll2);
       G.roll2Panel = box(DW, DH, 0.08, MAT.door, 0, DH / 2, 0, G.roll2); G.roll2Panel.castShadow = false;
+      bx(0.12, DH + 0.1, 0.2, MAT.steelDark, d0 - 0.06, (DH + 0.1) / 2, Z); bx(0.12, DH + 0.1, 0.2, MAT.steelDark, d1 + 0.06, (DH + 0.1) / 2, Z);
       bx(DW + 0.4, 0.42, 0.46, MAT.steelDark, HALL2.doorX, DH + 0.24, Z - 0.3);
-      hitBox(0.4, 1.4, 0.4, HALL2.doorX + DW / 2 + 0.35 - b.x, 1.5, Z - 0.22 - b.z, { prompt: function () { return (S.door2Open ? 'Pull the chain: close' : 'Pull the chain: open') + ' the bay 2 roll door'; }, use: function () { S.door2Open = !S.door2Open; sfx(S.door2Open ? 'unlock' : 'lock'); hudDirty = true; } });
+      cl(0.012, 1.3, MAT.chrome, d1 + 0.35, 1.55, Z - 0.22, 6);
+      hitBox(0.4, 1.4, 0.4, d1 + 0.35 - b.x, 1.5, Z - 0.22 - b.z, { prompt: function () { return (S.door2Open ? 'Pull the chain: close' : 'Pull the chain: open') + ' the bay 2 roll door'; }, use: function () { S.door2Open = !S.door2Open; sfx(S.door2Open ? 'unlock' : 'lock'); hudDirty = true; } });
       sign(['BAY 2'], 1.6, 0.5, HALL2.doorX - b.x, H + 0.55, Z + 0.22 - b.z, 0, { bg: '#1b232c' });
-      // the parts store: shelving along the back wall, west half (the stock boxes on it are drawn by 02-stock.js)
+      // the parts store: shelving along the back wall, west half (the stock boxes on it are drawn by 02-stock.js), with labelled bins on
+      // the top shelf and a stack of tyres at its end
       G.store2 = new THREE.Group(); G.store2.position.set(X0 + 2.4 - b.x, 0, -Z + 0.55 - b.z); g.add(G.store2);
       [-1.9, 0, 1.9].forEach(function (x) { box(0.05, 2.2, 0.5, MAT.rack, x, 1.1, 0, G.store2); }); [0.35, 0.95, 1.55, 2.1].forEach(function (y) { box(3.85, 0.04, 0.5, MAT.steel, 0, y, 0, G.store2); });
+      var binCols = [0x2c5f9e, 0x2c5f9e, 0xc8342a, 0xe0a02a, 0x2c5f9e, 0x5f9e5a, 0xc8342a, 0x2c5f9e];
+      binCols.forEach(function (c, i) { var bm = std({ color: c, roughness: 0.6 }), x = -1.68 + i * 0.48; box(0.4, 0.22, 0.4, bm, x, 2.23, 0.02, G.store2); box(0.18, 0.06, 0.004, MAT.paper, x, 2.24, 0.223, G.store2); });
+      [0.35, 0.95, 1.55, 2.1].forEach(function (y) { box(3.85, 0.05, 0.01, std({ color: 0xe0a02a, roughness: 0.6 }), 0, y - 0.005, 0.255, G.store2); });
       sol(X0 + 0.45, X0 + 4.35, -Z + 0.25, -Z + 0.85);
       G.store2Boxes = new THREE.Group(); G.store2Boxes.userData.dynamic = true; G.store2.add(G.store2Boxes);
       hitBox(3.8, 2.0, 0.6, X0 + 2.4 - b.x, 1.1, -Z + 0.6 - b.z, { prompt: function () { return rackPrompt(); }, use: function () { rackUse(); } });
-      // the office: two glazed walls in the north-east corner, a door gap, a desk with the second PC (a prop, so it can be moved)
-      var ox0 = X1 - 4, oz1 = -0.6;
-      bx(0.12, H - 0.4, 3.4 - 1.0, MAT.plaster, ox0, (H - 0.4) / 2, -Z + 1.7 - 0.5); sol(ox0 - 0.06, ox0 + 0.06, -Z, oz1 - 1.0);
-      bx(0.12, H - 2.5, 1.0, MAT.plaster, ox0, 2.1 + (H - 2.5) / 2, oz1 - 0.5);
-      bx(4.0, 1.0, 0.12, MAT.plaster, X1 - 2, 0.5, oz1); bx(4.0, 0.8, 0.06, MAT.skylight, X1 - 2, 1.4, oz1); bx(4.0, H - 2.2, 0.12, MAT.plaster, X1 - 2, 1.8 + (H - 2.2) / 2, oz1); sol(ox0, X1, oz1 - 0.06, oz1 + 0.06);
+      sign(['PARTS STORE'], 1.3, 0.28, X0 + 2.4 - b.x, 2.75, -Z + 0.18 - b.z, 0, { bg: '#1b232c' });
+      var tm = gcMats(); for (var t = 0; t < 4; t++) { var ty = gcMesh(gcTyreGeo(), tm.tyre, inner, X0 + 4.95, 0.115 + t * 0.225, -Z + 0.6); ty.rotation.y = t * 0.4; }
+      sol(X0 + 4.6, X0 + 5.3, -Z + 0.25, -Z + 0.95);
+      // the office in the north-east corner: block-and-glass walls with a door frame, the second PC on its desk (a prop, so it moves),
+      // a filing cabinet, a chair, a clock and a plant
+      var ox0 = X1 - 4, oz1 = -0.6, oh = H - 0.4;
+      bx(0.12, 1.0, 2.4, MAT.plaster, ox0, 0.5, -Z + 1.2); bx(0.12, 0.8, 2.4, glass, ox0, 1.4, -Z + 1.2); bx(0.12, oh - 1.8, 2.4, MAT.plaster, ox0, 1.8 + (oh - 1.8) / 2, -Z + 1.2);
+      [-Z + 0.05, -Z + 1.2, -Z + 2.35].forEach(function (z) { bx(0.14, 0.84, 0.05, frame, ox0, 1.4, z); }); bx(0.14, 0.05, 2.4, frame, ox0, 1.0, -Z + 1.2); bx(0.14, 0.05, 2.4, frame, ox0, 1.8, -Z + 1.2);
+      sol(ox0 - 0.06, ox0 + 0.06, -Z, oz1 - 1.0);
+      bx(0.12, oh - 2.1, 1.0, MAT.plaster, ox0, 2.1 + (oh - 2.1) / 2, oz1 - 0.5);
+      bx(0.16, 2.12, 0.06, frame, ox0, 1.06, oz1 - 1.0); bx(0.16, 2.12, 0.06, frame, ox0, 1.06, oz1); bx(0.16, 0.06, 1.06, frame, ox0, 2.1, oz1 - 0.5);
+      bx(4.0, 1.0, 0.12, MAT.plaster, X1 - 2, 0.5, oz1); bx(4.0, 0.8, 0.12, glass, X1 - 2, 1.4, oz1); bx(4.0, oh - 1.8, 0.12, MAT.plaster, X1 - 2, 1.8 + (oh - 1.8) / 2, oz1); sol(ox0, X1, oz1 - 0.06, oz1 + 0.06);
+      [ox0 + 0.05, X1 - 3, X1 - 2, X1 - 1, X1 - 0.1].forEach(function (x) { bx(0.05, 0.84, 0.14, frame, x, 1.4, oz1); }); bx(4.0, 0.05, 0.14, frame, X1 - 2, 1.0, oz1); bx(4.0, 0.05, 0.14, frame, X1 - 2, 1.8, oz1);
       sign(['OFFICE'], 0.9, 0.24, ox0 - 0.07 - b.x, 2.3, -2.8 - b.z, -Math.PI / 2, { bg: '#1b232c' });
-      // the waiting corner: two chairs and a coffee machine by the front wall
+      bx(0.45, 1.3, 0.6, MAT.steelDark, X1 - 0.45, 0.65, -Z + 2.4); [0.35, 0.75, 1.15].forEach(function (y) { bx(0.3, 0.03, 0.01, MAT.chrome, X1 - 0.45, y, -Z + 2.705); });
+      sol(X1 - 0.7, X1 - 0.2, -Z + 2.1, -Z + 2.7);
+      cl(0.22, 0.04, MAT.black, X1 - 2.3, 0.45, -Z + 1.6, 16); cl(0.03, 0.42, MAT.steelDark, X1 - 2.3, 0.22, -Z + 1.6, 8); bx(0.42, 0.45, 0.06, MAT.black, X1 - 2.3, 0.72, -Z + 1.82);
+      cl(0.16, 0.03, MAT.white, X1 - 2, 2.5, -Z + 0.19, 20).rotation.x = Math.PI / 2;
+      cl(0.14, 0.3, MAT.grey, ox0 + 0.35, 0.15, -Z + 0.35, 12); sphere(0.28, std({ color: 0x4f7f3a, roughness: 1 }), ox0 + 0.35 - b.x, 0.55, -Z + 0.35 - b.z);
+      // the waiting corner by the door: two chairs, a low table with magazines, a coffee machine, a plant and a sign
       [X1 - 2.2, X1 - 1.4].forEach(function (x) { bx(0.5, 0.06, 0.5, MAT.red, x, 0.45, Z - 0.7); bx(0.5, 0.5, 0.06, MAT.red, x, 0.72, Z - 0.45); bx(0.04, 0.45, 0.04, MAT.steelDark, x, 0.22, Z - 0.7); });
       bx(0.5, 1.5, 0.5, MAT.black, X1 - 0.5, 0.75, Z - 0.6); bx(0.36, 0.3, 0.04, glowMat(0xf5b53d, 0.5), X1 - 0.5, 1.15, Z - 0.84);
-      sol(X1 - 2.5, X1 - 0.2, Z - 1.0, Z - 0.3);
-      // the doorway between the halls is the old side door; its box keeps the lights apart a little
+      bx(0.7, 0.04, 0.45, MAT.wood, X1 - 1.8, 0.4, Z - 1.35); [-0.3, 0.3].forEach(function (dx) { bx(0.04, 0.38, 0.4, MAT.steelDark, X1 - 1.8 + dx, 0.19, Z - 1.35); });
+      bx(0.22, 0.01, 0.3, MAT.paper, X1 - 1.95, 0.425, Z - 1.35); bx(0.22, 0.01, 0.3, std({ color: 0xc8342a, roughness: 0.8 }), X1 - 1.66, 0.425, Z - 1.3);
+      cl(0.16, 0.34, MAT.grey, X1 - 2.85, 0.17, Z - 0.5, 12); sphere(0.3, std({ color: 0x4f7f3a, roughness: 1 }), X1 - 2.85 - b.x, 0.6, Z - 0.5 - b.z);
+      sign(['WAITING AREA'], 1.1, 0.26, X1 - 0.18 - b.x, 2.2, Z - 1.4 - b.z, -Math.PI / 2, { bg: '#1b232c' });
+      sol(X1 - 2.5, X1 - 0.2, Z - 1.6, Z - 0.3);
+      // the working side of bay 2: a workbench and a red tool chest along the east wall, an oil drum and a safety notice on the back wall
+      bx(0.7, 0.06, 1.6, MAT.wood, X1 - 0.5, 0.9, 1.3); bx(0.64, 0.5, 1.5, MAT.steelDark, X1 - 0.5, 0.3, 1.3); bx(0.4, 0.25, 0.3, MAT.red, X1 - 0.5, 1.06, 0.8); bx(0.05, 0.6, 1.6, MAT.cork, X1 - 0.17, 1.55, 1.3);
+      sol(X1 - 0.85, X1 - 0.15, 0.5, 2.1);
+      bx(0.6, 1.0, 0.45, MAT.red, X1 - 0.4, 0.5, -0.1); [0.2, 0.4, 0.6, 0.8].forEach(function (y) { bx(0.5, 0.012, 0.01, MAT.chrome, X1 - 0.4, y, -0.33); }); bx(0.62, 0.04, 0.47, MAT.black, X1 - 0.4, 1.02, -0.1);
+      sol(X1 - 0.7, X1 - 0.1, -0.35, 0.15);
+      cl(0.3, 0.9, MAT.blue, X0 + 5.6, 0.45, -Z + 0.5, 16); sol(X0 + 5.3, X0 + 5.9, -Z + 0.2, -Z + 0.8);
+      sign(['SAFETY FIRST', 'lift arms locked before you go under'], 1.3, 0.4, X0 + 5.6 - b.x, 1.9, -Z + 0.17 - b.z, 0, { bg: '#f3c843', fg: '#1b232c' });
+      // the linings: painted plaster inside on all four walls, the roll door and the side door left open, the floor's skirting with them
+      WORLD_PARENT = inner;
       lineWall('z', -Z, X0, X1, H - 0.4, MAT.plaster, [], 1, { inset: 0.16 }); lineWall('x', X1, -Z, Z, H - 0.4, MAT.plaster, [], -1, { inset: 0.16 });
+      lineWall('z', Z, X0, X1, H - 0.4, MAT.plaster, [[d0, d1, DH]], -1, { inset: 0.16 }); lineWall('x', X0, -Z, Z, H - 0.4, MAT.plaster, [[1.6, 2.6, 2.25]], 1, { inset: 0.16 });
+      WORLD_PARENT = g;
       buildLift(1, b.x, b.z);
     } finally { WORLD_PARENT = prev; }
     // the solids of the new hall are in the lock-up's frame as built; they join the item's own so an editor move takes them along
     var mine = solids.slice(n0); g.userData.solids = (g.userData.solids || []).concat(mine);
     tickRoll2(1);
   }
+  // what you placed in the editor where the new hall stands (a tree, a fence, a lamp post) cannot stand inside it: once the world is
+  // built and baked, those world items are put away, their solids with them, and the bake is made again. Props are cleared the night
+  // the garage grows (02-jobs.js, growClear)
+  function hall2Clash() {
+    if (!grown() || !G.lockup) return []; var o = LO(), x0 = o.x + HALL2.x0 + 0.2, x1 = o.x + HALL2.x1 + 0.15, z0 = o.z + HALL2.z0 - 0.15, z1 = o.z + HALL2.z1 + 0.15;
+    return WORLD_ITEMS.filter(function (it) {
+      if (it === G.lockup || !it.visible) return false; var bb = new THREE.Box3().setFromObject(it); if (bb.isEmpty() || bb.max.x - bb.min.x > 8 || bb.max.z - bb.min.z > 8) return false;
+      return !(bb.max.x < x0 || bb.min.x > x1 || bb.max.z < z0 || bb.min.z > z1);
+    });
+  }
+  hook('boot', function () {
+    var list = hall2Clash(), n = list.length;
+    list.forEach(function (it) { it.visible = false; (it.userData.solids || []).forEach(function (s) { var k = solids.indexOf(s); if (k >= 0) solids.splice(k, 1); }); });
+    if (n) { rebake(); navSetup({ x0: -PLOT.x, z0: PLOT.z0, width: 2 * PLOT.x, depth: PLOT.z1 - PLOT.z0 + 2, cell: 0.4 }); G.hall2Cleared = n; }
+  });
   // the roll door rides up into its box while open, or while a customer walks through; the shadow map follows it
   function tickRoll(dt) {
     var want = S.doorOpen || G.customerNearDoor ? 1 : 0;

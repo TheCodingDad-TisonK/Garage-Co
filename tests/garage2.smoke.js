@@ -9,6 +9,9 @@ module.exports = `
   ok(!!T.propInst.officeDesk && T.G.pcs.length === 2 && !!T.G.store2Boxes, 'the office desk with the second PC, and the parts store');
   ok(T.stockCap() === 124 && T.G.store2Boxes.children.length >= 0, 'the parts store adds 60: ' + T.stockCap());
   ok(T.navFreeAt(LO.x + 10, LO.z) && T.navFreeAt(LO.x + 5, LO.z + 2.1) && T.navFreeAt(LO.x + H.doorX, LO.z + T.LOCKUP.z), 'the route finder walks the new hall, the side door and the second doorway');
+  ok(T.G.lockup.userData.worldKey === 'lock-up@0,0' && S.hdoors.side && S.hdoors.side.open, 'with the side door saved open the lock-up keeps its key (' + T.G.lockup.userData.worldKey + '), so the editor move applies: ' + JSON.stringify(LO));
+  ok(T.hall2Clash().length === 0, 'nothing placed in the editor stands inside the new hall (' + (T.G.hall2Cleared || 0) + ' put away)');
+  ok(T.G.store2.children.length > 10 && !!T.propInst.officeDesk && T.inLockup(LO.x + 13, LO.z - 3), 'the parts store is dressed, the office has its desk');
   const lockupItem = T.G.lockup; ok(lockupItem && lockupItem.userData.worldKey && /^lock-up@/.test(lockupItem.userData.worldKey) && lockupItem.userData.solids.length > 12, 'the new hall is part of the lock-up world item: ' + lockupItem.userData.worldKey);
   // two cars, one in each bay
   T.devCommand('car', 'oil'); T.devCommand('car', 'brakes'); ok(!!T.job(0) && !!T.job(1), 'two cars on the way');

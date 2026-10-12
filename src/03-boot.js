@@ -94,7 +94,7 @@
   GAME.onEnter = function (loaded) { if (!loaded) { S.time = OPEN_AT; logEvent('Welcome to Garage Co. This is your lock-up. Pull the chain to open the roll door; the first car is due at a quarter past eight. The PC on the desk orders parts.', 'rare'); save(); } else logEvent('Back at the garage. Day ' + S.day + ', ' + fmtTime(S.time) + '.'); G.nextCarAt = worldTime + 12; };
   GAME.menuCamera = function (dt) { var t = worldTime * 0.05; camera.position.set(9 + Math.sin(t) * 2.5, 2.4, 13 + Math.cos(t) * 1.5); camera.lookAt(0, 1.6, LOCKUP.z - 1); };
   GAME.tick = function (dt) { tickTime(dt); tickCars(dt); tickCustomers(dt); workTick(dt); tickVan(dt); staffTick(dt); for (var b = 0; b < bayCount(); b++) gcCarAnimate(b, dt); };
-  GAME.present = function (dt) { tickRoll(dt); tyreWheelSync(); liftSync(); gcHeldSync(dt); };
+  GAME.present = function (dt) { tickRoll(dt); tyreWheelSync(); liftSync(); gcHeldSync(dt); markerSync(dt); };
   GAME.hiddenTick = function (dt) { tickRoll(dt); };
   GAME.T = function () {
     return { GAME: GAME, G: G, traffic: traffic, FAULTS: FAULTS, PARTS: PARTS, STEPS: STEPS, PLACES: PLACES, nearTyre: nearTyre, tyreSpot: tyreSpot, staffById: staffById, propPlacement: propPlacement, drawScreens: drawScreens, saveNow: saveNow, TOOLS: TOOLS, UPGRADES: UPGRADES, ROLES: ROLES, LOCKUP: LOCKUP, HALL2: HALL2, FORECOURT: FORECOURT, BAY: BAY, BAYS: BAYS, DESK: DESK, DESK_STAND: DESK_STAND, ROAD_Z: ROAD_Z, PC: PC,
@@ -102,7 +102,7 @@
       newCar: newCar, spawnCar: spawnCar, removeCar: removeCar, placeCar: placeCar, spawnCustomer: spawnCustomer, removeCustomer: removeCustomer, restoreJobs: restoreJobs, takeJob: takeJob, takePayment: takePayment, offerExtra: offerExtra, addXp: addXp, xpFor: xpFor, tickRoll: tickRoll, dayEnd: dayEnd, repChange: repChange,
       stepsOf: stepsOf, curStep: curStep, doStep: doStep, placeUse: placeUse, placePrompt: placePrompt, rackUse: rackUse, rackPrompt: rackPrompt, toolUse: toolUse, stepBlock: stepBlock, missingParts: missingParts, carVis: carVis, tyreUse: tyreUse, tyrePrompt: tyrePrompt,
       orderParts: orderParts, putAway: putAway, stockTotal: stockTotal, stockCap: stockCap, onOrder: onOrder, buyUpgrade: buyUpgrade, owns: owns, roomInst: roomInst, hire: hire, candidates: candidates, staffList: staffList, assignNext: assignNext, letGo: letGo, pcTap: pcTap, pcGo: pcGo, pcRows: pcRows, jobChip: jobChip, handLine: handLine,
-      SYMPTOMS: SYMPTOMS, CHECKS: CHECKS, symptomOf: symptomOf, diagnosing: diagnosing, candList: candList, consistent: consistent, checksFor: checksFor, checkAt: checkAt, doCheck: doCheck, nameFault: nameFault, jobLabel: jobLabel,
+      SYMPTOMS: SYMPTOMS, CHECKS: CHECKS, symptomOf: symptomOf, diagnosing: diagnosing, candList: candList, consistent: consistent, checksFor: checksFor, checkAt: checkAt, doCheck: doCheck, nameFault: nameFault, jobLabel: jobLabel, hall2Clash: hall2Clash, markerTarget: markerTarget,
       car: function (b) { return carIn(b || 0); }, LIFTS: LIFTS, liftWorld: liftWorld, liftCar: liftCar, liftUse: liftUse, liftPrompt: liftPrompt, getIn: getIn, getOut: getOut, canDrive: canDrive, carHeight: carHeight, drive: function () { return G.drive; }, customer: function (b) { return customerIn(b || 0); }, job: function (b) { return jobAt(b || 0); }, van: function () { return G.van; }, carPrompt: carPrompt, customerPrompt: customerPrompt, drawJobCard: drawJobCard };
   };
   CO.boot(GAME);

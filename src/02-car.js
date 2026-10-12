@@ -186,6 +186,7 @@
     P.pan = gcGrp(g, 0.98, 0, 0.8); P.pan.visible = false; cyl(0.25, 0.08, M.black, 0, 0.04, 0, P.pan, 22); P.panOil = cyl(0.23, 0.01, M.oil, 0, 0.02, 0, P.pan, 22); P.panPlug = cyl(0.018, 0.03, M.alu, 0.1, 0.06, -0.08, P.pan, 6);
     P.stream = cyl(0.009, 1, M.oil, 0.98, 0.1, 0.68, g, 6); P.stream.visible = false; P.stream.castShadow = false;
     // the wheel nuts once they are off: in a little pile by the wheel
+    P.floorParts = gcGrp(g, 2.0, 0, 1.4); P.floorParts.userData.key = '';
     P.nutPile = gcGrp(g, 1.0, 0, 1.35); P.nutPile.visible = false; [[0, 0], [0.04, 0.01], [-0.03, 0.03], [0.02, -0.04], [-0.04, -0.02]].forEach(function (n) { cyl(0.013, 0.026, M.alu, n[0], 0.013, n[1], P.nutPile, 6); });
     // the jug and the coolant bottle that pour while a fill step fills
     P.can = gcGrp(g, 1.36, 1.2, 0.36); P.can.visible = false; gcMesh(bevelGeo(0.16, 0.22, 0.1, 0.02), M.yellow, P.can, 0, 0, 0); cyl(0.02, 0.06, M.black, 0.09, -0.1, 0, P.can, 8).rotation.z = 1.0; P.can.rotation.z = 0.9;
@@ -283,6 +284,16 @@
     P.coils.forEach(function (c, i) { c.position.y = c.userData.base + coilUp * (0.12 + i * 0.01); }); P.plugs.forEach(function (pl) { pl.position.y = pl.userData.base + plugUp * 0.16; pl.children[0].material = sm; });
     // the wipers lift off the glass while the blades are changed
     var wl = gcEase(A, 'wip', live('wipers') ? Math.sin(p * Math.PI) : 0, 12, snap, dt); P.wipers.forEach(function (w) { w.rotation.x = wl * 0.9; });
+    // the new parts waiting by the car: taken off the rack, out of your hands, not yet fitted (a fit step past half way has put it in)
+    var waiting = [];
+    if (J && J.state === 'taken' && !(S.hand && S.hand.kind === 'parts' && S.hand.bay === b)) {
+      var st = stepsOf(J), got = {}, fit = {};
+      for (var si = 0; si < st.length; si++) { var x = st[si]; if (si < J.step) { if (x.act === 'fetch') got[x.fault] = true; if (x.fit) fit[x.fault] = true; } else if (si === J.step && x.fit && J.stepP > 0 && (x.anim === 'oilfill' || x.anim === 'coolant' || J.stepP > 0.5)) fit[x.fault] = true; }
+      Object.keys(got).forEach(function (f) { if (!fit[f]) (faultById(f).parts || []).forEach(function (pt) { waiting.push(pt); }); });
+    }
+    var wkey = waiting.join(',');
+    if (wkey !== P.floorParts.userData.key) { while (P.floorParts.children.length) P.floorParts.remove(P.floorParts.children[0]); waiting.forEach(function (pt, i) { var pm = gcPartMesh(pt); pm.position.set((i % 3) * 0.26, 0, Math.floor(i / 3) * 0.3); pm.rotation.y = 0.3 * i; P.floorParts.add(pm); }); P.floorParts.userData.key = wkey; }
+    P.floorParts.position.y = -h;
     // the exhaust: the old silencer is unbolted and lowered to the floor, the new one (bright) is lifted into place and bolted on
     var exT = live('exhoff') ? p : live('exhon') ? 1 - p : (done('exhoff') && !done('exhon') && !over) ? 1 : 0; exT = gcEase(A, 'exh', exT, 10, snap, dt);
     P.silencer.position.y = P.silencerBase + (-h + 0.08 - P.silencerBase) * exT; P.silencer.rotation.x = exT * 0.15;
@@ -359,7 +370,7 @@
         var g = new THREE.Group(); g.userData.dynamic = true; H.g = g; scene.add(g);
         if (S.tool) { var tm = gcToolMesh(S.tool); tm.position.set(0.26, -0.27, -0.45); tm.rotation.set(-0.5, 0.45, 0.75); tm.scale.set(0.6, 0.6, 0.6); g.add(tm); H.tool = tm; } else H.tool = null;
         if (S.hand && S.hand.kind === 'wheel') { var wm = gcWheelMesh(1); wm.position.set(-0.05, -0.42, -0.62); wm.rotation.set(0.3, 0.4, 0); wm.scale.set(0.9, 0.9, 0.9); g.add(wm); }
-        else if (S.hand && S.hand.kind === 'parts') { var J = jobAt(S.hand.bay), list = J ? partsOf(J.faults || []) : []; if (list.length) { var pm = gcPartMesh(list[0]); pm.position.set(-0.16, -0.3, -0.45); pm.rotation.set(0.2, 0.5, 0); g.add(pm); } }
+        else if (S.hand && S.hand.kind === 'parts') { var J = jobAt(S.hand.bay), list = J ? partsOf(J.faults || []) : []; if (list.length) { var pm = gcPartMesh(list[0]); pm.position.set(-0.24, -0.34, -0.62); pm.rotation.set(0.25, 0.6, 0); pm.scale.set(0.55, 0.55, 0.55); g.add(pm); } }
         g.traverse(function (o) { o.castShadow = false; o.receiveShadow = false; });
       }
     }

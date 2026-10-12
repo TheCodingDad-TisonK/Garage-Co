@@ -30,11 +30,14 @@ module.exports = `
   // take the job at the desk
   T.player.x = T.deskStand(0).x; T.player.z = T.deskStand(0).z + 1.6; T.player.y = 0;
   { const txt = T.lookAt(T.customer(0).rec.x, 1.3, T.customer(0).rec.z); ok(/Take the job/.test(txt) && /oil light/.test(txt), 'looking at the customer offers the job: ' + txt); }
+  ok((T.markerTarget() || {}).key === 'customer', 'the marker is over the customer at the desk');
   T.useFocus(); const J = T.job(0); ok(J.state === 'taken' && J.step === 0 && J.due > S.time && T.stepsOf(J).length === 10, 'E takes the job: ten steps, promised for ' + T.fmtTime(J.due));
   T.openPanel('jobs'); ok(/step 1 of 10/.test(T.panelHtml()) && /The clipboard/.test(document.getElementById('dc-panel-title').textContent), 'the clipboard shows the open job at step 1'); T.closePanel();
+  ok((T.markerTarget() || {}).key === 'rack', 'taken: the marker moves to the parts rack');
   // step 1: the parts off the rack
   { const r = T.propInst.rack.g.position; T.player.x = r.x - 1.6; T.player.z = r.z; const txt = T.lookAt(r.x, 1.0, r.z); ok(/Take the oil and a filter from the rack/.test(txt), 'the rack offers the parts: ' + txt); }
   T.useFocus(); ok(J.step === 1 && S.stock.oil === 1 && S.stock.oilfilter === 1 && S.hand && /parts for/.test(S.hand.label) && T.G.rackBoxes.children.length === 7, 'E at the rack takes the oil and a filter: the rack shows seven boxes');
+  ok((T.markerTarget() || {}).key === 'car:jack', 'parts in hand: the marker is on the jacking point');
   // step 2: the jack. The place answers; the body of the car does not take the E
   T.player.x = T.BAY.x + 2.4; T.player.z = T.BAY.z;
   { const txt = look(0, 'jack'); ok(/Hold E: Jack the car up/.test(txt), 'the jacking point says what to do: ' + txt); }
@@ -43,10 +46,12 @@ module.exports = `
   T.player.x = -3; T.player.z = 0; T.run(0.5); ok(!T.G.hold && J.step === 1, 'walking away lets go of it'); T.player.keys.KeyE = false;
   T.player.x = T.BAY.x + 2.4; T.player.z = T.BAY.z; look(0, 'jack'); T.useFocus(); await hold(2);
   ok(J.step === 2 && J.vis.up === true && Math.abs(T.car(0).g.position.y - 0.14) < 0.01 && T.car(0).jackMesh.visible, 'the car is up on the jack: y ' + T.car(0).g.position.y);
+  ok((T.markerTarget() || {}).key === 'tool:spanner', 'the sump plug wants the spanner: the marker is on its hook on the tool wall');
   // step 3 wants the spanner: the tool wall
   { const txt = look(0, 'sump'); ok(/you need the spanner/.test(txt), 'the sump plug asks for the spanner: ' + txt); }
   { const tw = T.propInst.toolWall.g; const hp = tw.localToWorld(V3(-1.0, 1.5, 0.06)); const out = tw.localToWorld(V3(-1.0, 1.5, 1.5)); T.player.x = out.x; T.player.z = out.z; const txt = T.lookAt(hp.x, hp.y, hp.z); ok(/Take the spanner/.test(txt), 'the tool wall offers the spanner: ' + txt); T.useFocus(); }
   ok(S.tool === 'spanner' && !T.G.toolHooks.spanner.tool.visible, 'the spanner is in your hand and its hook shows the outline');
+  ok((T.markerTarget() || {}).key === 'car:sump', 'spanner in hand: the marker is on the sump plug');
   T.player.x = T.BAY.x + 2.4; T.player.z = T.BAY.z;
   look(0, 'sump'); T.useFocus(); await hold(2.2); ok(J.step === 3 && J.vis.pan && T.car(0).pan.visible, 'the sump plug is out and the pan is under it');
   look(0, 'sump'); T.useFocus(); await hold(3.2); ok(J.step === 4, 'the old oil drained');

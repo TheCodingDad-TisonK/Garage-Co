@@ -1,7 +1,7 @@
 {
   "name": "garage-co",
   "productName": "Garage Co",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Standalone hobby game, NOT a Farming Simulator product. A first-person car workshop on Co Engine: cars come in broken, you take the job, fix the fault and take the money.",
   "main": "main.js",
   "author": "TheCodingDad-TisonK",
@@ -18,7 +18,7 @@
     "installer": "npm run check && npm run brand && node node_modules/co-engine/tools/verify-icon.js && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
-    "co-engine": "github:TheCodingDad-TisonK/Co-Engine#v0.13.0"
+    "co-engine": "github:TheCodingDad-TisonK/Co-Engine#v0.13.1"
   },
   "devDependencies": {
     "electron": "^33.2.1",

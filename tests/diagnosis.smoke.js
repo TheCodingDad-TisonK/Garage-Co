@@ -44,7 +44,11 @@ module.exports = `
   ok(T.nameFault(0, 'battery') === '' && !T.diagnosing(J) && J.faults.join() === 'battery' && J.price === Math.round(25 * (0.9 + S.rep / 250)) + 95, 'named: a new battery for ' + J.price);
   ok(J.vis.open && T.curStep(J).act === 'fetch', 'the bonnet stays up for a job under it; the parts first');
   T.rackUse(); ok(J.step === 2 && /clamp/.test(T.curStep(J).label), 'with the bonnet up its Open step is skipped: ' + T.curStep(J).label);
-  atCar(0); T.toolUse('spanner'); press(0, 'battery'); await hold(2.2); press(0, 'battery'); await hold(2.2); press(0, 'bonnet');
+  ok(S.hand && S.hand.kind === 'parts', 'the new battery is in your hands');
+  atCar(0); T.toolUse('spanner'); press(0, 'battery'); ok(!S.hand, 'starting on the car puts the new battery down beside it'); await hold(2.2);
+  { const fp = T.car(0).parts.floorParts; ok(fp.children.length === 1 && fp.visible !== false, 'the new battery waits on the floor by the car while the clamp comes off'); }
+  press(0, 'battery'); await hold(2.2); ok(!S.hand && J.state === 'taken' && T.car(0).parts.floorParts.children.length === 0, 'dropped in: the battery is off the floor and in the car before the bonnet is shut');
+  press(0, 'bonnet');
   ok(J.state === 'done' && S.stats.diagRight === 1 && (S.level > lvl0 || S.xp >= xp0 + 5 + 10 + 4), 'right first time: fixed, the books count it, and 5 XP more');
   T.takePayment(0); T.run(40); ok(!T.job(0), 'paid and gone');
 

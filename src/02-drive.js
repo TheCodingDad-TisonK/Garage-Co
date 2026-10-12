@@ -24,7 +24,7 @@
     if (s && s.at === 'lift') { var why = stepBlock(b, s); return why ? s.label + ': ' + why : verb(s) + s.label + (J.stepP > 0 ? ' · ' + Math.round(J.stepP * 100) + '%' : ''); }
     return 'The lift: ' + J.car.make + (J.vis && J.vis.up ? ', up' : ', down') + (s ? ' · next: ' + s.label : '');
   }
-  function liftUse(i) { var b = liftCar(i); if (b < 0) return; var J = jobAt(b), s = curStep(J); if (!s || s.at !== 'lift') { toast(s ? 'Next: ' + s.label + ' (' + placeName(s.at) + ').' : 'Nothing to do on the lift.', ''); return; } var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; } J.by = 'player'; G.hold = { bay: b, step: J.step, at: 'lift', fill: false }; }
+  function liftUse(i) { var b = liftCar(i); if (b < 0) return; var J = jobAt(b), s = curStep(J); if (!s || s.at !== 'lift') { toast(s ? 'Next: ' + s.label + ' (' + placeName(s.at) + ').' : 'Nothing to do on the lift.', ''); return; } var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; } J.by = 'player'; setPartsDown(b); G.hold = { bay: b, step: J.step, at: 'lift', fill: false }; }
   // a jack step becomes a lift step while the car is on a lift: quicker, and the car goes up to working height
   function liftStep(J, s) { if (J.lift === null || J.lift === undefined || s.at !== 'jack') return s; return { at: 'lift', act: 'hold', secs: s.secs * 0.6, tool: null, label: s.fx === 'up' ? 'Raise the car on the lift' : 'Lower the lift', fx: s.fx, fault: s.fault }; }
   // the height the car stands at now: on a lift it rises as the step fills

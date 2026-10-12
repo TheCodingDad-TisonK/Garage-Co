@@ -68,7 +68,11 @@
     exhaust: [fetchStep('an exhaust section'), JACK_UP, ['exhaust', 'hold', 3, 'spanner', 'Unbolt the old exhaust section', null, 'exhoff'], ['exhaust', 'hold', 3, 'spanner', 'Bolt the new section on', null, 'exhon'], LOWER],
     discs: [fetchStep('the discs and pads'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 5, 'spanner', 'Swap the discs and pads', null, 'discs'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER]
   };
-  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, anim: a[6] || null, fault: fid }; }
+  // the steps that fit the new part: once one is done the parts you took off the rack are in the car, not in your hands
+  var FIT_ANIMS = ['oilfill', 'pads', 'discs', 'bulb', 'battery', 'wipers', 'airfilter', 'plugs', 'coolant', 'exhon'];
+  // starting work on the car puts the parts you carried from the rack down on the floor beside it (02-car.js draws them there)
+  function setPartsDown(b) { if (S.hand && S.hand.kind === 'parts' && S.hand.bay === b) { S.hand = null; sfx('putdown'); hudDirty = true; } }
+  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, anim: a[6] || null, fit: FIT_ANIMS.indexOf(a[6]) >= 0, fault: fid }; }
   // a job's steps: each fault's in turn (a second fault the customer said yes to comes after the first)
   function stepsOf(J) { var out = []; jobFaults(J).forEach(function (fid) { (STEPS[fid] || []).forEach(function (a) { out.push(liftStep(J, mkStep(a, fid))); }); }); return out; }
   function curStep(J) { if (!J || J.state !== 'taken') return null; return stepsOf(J)[J.step] || null; }
@@ -232,7 +236,7 @@
     var J = jobAt(b); if (diagnosing(J)) { diagUse(b, at); return; }
     var s = curStep(J); if (!s || s.at !== at) return;
     var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; }
-    J.by = 'player';
+    J.by = 'player'; setPartsDown(b);
     if (s.act === 'press' || s.act === 'wheel') { if (s.act === 'wheel' && S.hand && S.hand.kind === 'wheel') S.hand = null; doStep(b, 'player'); return; }
     if (s.act === 'hold' || s.act === 'fill') { G.hold = { bay: b, step: J.step, at: at, fill: s.act === 'fill' }; }
   }
@@ -262,6 +266,7 @@
     var J = jobAt(b), s = curStep(J); if (!s) return false;
     if (s.act === 'fetch' && by !== 'player') { if (!takeParts(b, s)) return false; }
     stepFx(b, s.fx);
+    if (s.fit && S.hand && S.hand.kind === 'parts' && S.hand.bay === b) S.hand = null;
     if (s.fx === 'wheeloff' && by === 'player' && stepsOf(J).slice(J.step + 1).some(function (x) { return x.at === 'tyre'; })) S.hand = { kind: 'wheel', bay: b, label: J.car.name + "'s wheel" };
     J.step++; J.stepP = 0; J.over = false; J.hold = null; addXp(1);
     // the last step: start it up. A wrong name shows now (finding the fault, above)
@@ -305,3 +310,55 @@
   GAME.hitPriority = function (hs, first) { var d = hs.object.userData.it, f = first && first.object.userData.it; return !!(d && d.gc && f && f.gcCar !== undefined && d.prompt()); };
   // the HUD line for your hands
   function handLine() { var t = S.tool ? TOOLS[S.tool].name : 'no tool', h = S.hand ? S.hand.label : ''; return t + (h ? ' · ' + h : ''); }
+
+  // ── The marker ────────────────────────────────────────────────────
+  // what to do next is marked where it is: a bobbing amber arrow over it and a glowing outline round it, seen through the car. It follows
+  // the job you are on (the one you have worked, or the nearest): the customer to take the job or the payment, the tool on the wall
+  // when the next step wants one you are not holding, the parts rack, the place on the car (the step, or a check while the fault is
+  // found), the lift's control box, the tyre corner. Nothing while you drive, or while a worker has the car
+  function markerJob() {
+    var best = -1, bd = 1e9;
+    for (var b = 0; b < bayCount(); b++) { var J = jobAt(b), C = carIn(b); if (!J || !C || J.state === 'coming' || J.state === 'paid' || J.state === 'leaving') continue; if (J.assign && staffById(J.assign)) continue; if (S.hand && S.hand.bay === b) return b; if (J.state === 'taken' && J.by === 'player') return b; var d = dist2(player.x, player.z, C.x, C.z); if (d < bd) { bd = d; best = b; } }
+    return best;
+  }
+  // the target: a world point, a size, a turn (the outline is aligned with what it marks) and a key for the tests
+  function markerTarget() {
+    if (G.drive) return null; var b = markerJob(); if (b < 0) return null; var J = jobAt(b), C = carIn(b), cu = customerIn(b);
+    var onCar = function (at) { var P = PLACES[at]; if (!P || !P.p) return null; C.g.updateMatrixWorld(true); var w = C.g.localToWorld(new THREE.Vector3(P.p[0], P.p[1], P.p[2])); return { x: w.x, y: w.y, z: w.z, s: P.s, ry: C.g.rotation.y, key: 'car:' + at }; };
+    var onObj = function (g, dy, s, key) { if (!g) return null; g.updateMatrixWorld(true); var w = new THREE.Vector3(); g.getWorldPosition(w); var q = new THREE.Quaternion(); g.getWorldQuaternion(q); var e = new THREE.Euler().setFromQuaternion(q, 'YXZ'); return { x: w.x, y: w.y + dy, z: w.z, s: s, ry: e.y, key: key }; };
+    var tool = function (t) { var H = G.toolHooks && G.toolHooks[t]; return H ? onObj(H.hook, 0, [0.26, 0.6, 0.14], 'tool:' + t) : null; };
+    if ((J.state === 'waiting' || J.state === 'done') && cu && !cu.walking) return onObj(cu.g, 0.95, [0.8, 1.95, 0.8], 'customer');
+    if (J.state !== 'taken') return null;
+    if (diagnosing(J)) {
+      var ck = checksFor(J)[0]; if (!ck) return null; var K = CHECKS[ck];
+      if (K.tool && S.tool !== K.tool) return tool(K.tool);
+      if (PLACES[K.at].bay && !(J.vis && J.vis.open)) return onCar('bonnet');
+      return onCar(K.at);
+    }
+    var s = curStep(J); if (!s) return null;
+    if (s.tool && S.tool !== s.tool && toolOwned(s.tool)) return tool(s.tool);
+    if (s.act === 'fetch') { var R = propInst.rack; return R ? onObj(R.g, 1.0, [1.95, 1.95, 0.5], 'rack') : null; }
+    if (s.at === 'lift') { var L = liftWorld(J.lift || 0); return { x: L.x - 1.5, y: 1.25, z: L.z + 0.25, s: [0.32, 0.42, 0.22], ry: 0, key: 'lift' }; }
+    if (s.at === 'tyre') { var T2 = roomInst('gcTyre'); return T2 ? onObj(T2.g, 0.9, [1.6, 1.4, 1.2], 'tyre') : null; }
+    if (PLACES[s.at] && PLACES[s.at].bay && !(J.vis && J.vis.open)) return onCar('bonnet');
+    return onCar(s.at);
+  }
+  function markerBuild() {
+    var amber = new THREE.MeshBasicMaterial({ color: 0xffb53d, transparent: true, opacity: 0.95, depthTest: false }), g = new THREE.Group(); g.userData.dynamic = true; g.renderOrder = 999;
+    var arrow = new THREE.Group(); g.add(arrow);
+    var head = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 14), amber); head.rotation.x = Math.PI; arrow.add(head);
+    var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.18, 10), amber); stem.position.y = 0.19; arrow.add(stem);
+    var line = new THREE.LineBasicMaterial({ color: 0xffb53d, transparent: true, opacity: 0.9, depthTest: false });
+    var box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), line); g.add(box);
+    [head, stem, box].forEach(function (m) { m.renderOrder = 999; m.castShadow = false; m.frustumCulled = false; });
+    scene.add(g); G.marker = { g: g, arrow: arrow, box: box, line: line, amber: amber, at: null };
+    return G.marker;
+  }
+  function markerSync(dt) {
+    var t = markerTarget(), M = G.marker || (t ? markerBuild() : null); if (!M) return;
+    M.at = t ? t.key : null; M.g.visible = !!t; if (!t) return;
+    var pulse = 0.55 + 0.45 * Math.sin(worldTime * 5);
+    M.box.position.set(t.x, t.y, t.z); M.box.rotation.set(0, t.ry || 0, 0); M.box.scale.set(t.s[0] + 0.06, t.s[1] + 0.06, t.s[2] + 0.06);
+    M.arrow.position.set(t.x, t.y + t.s[1] / 2 + 0.28 + Math.sin(worldTime * 3) * 0.06, t.z); M.arrow.rotation.y += (dt || 0) * 1.5;
+    M.line.opacity = 0.35 + 0.55 * pulse; M.amber.opacity = 0.7 + 0.3 * pulse;
+  }

@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.13.0', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.13.1', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -3496,10 +3496,10 @@
       "bench": { x: -3.8, z: 0.3, rot: 1, h: 0 },
       "desk": { x: -3.25, z: -5.1, rot: 0, h: 0 },
       "drum": { x: 4.85, z: 1.45, rot: 0, h: 0 },
-      "jack": { x: 3.9, z: 0.3, rot: 1, h: 0 },
+      "jack": { x: 4.35, z: 0.2, rot: 1, h: 0 },
       "noticeBoard": { x: -4.33, z: -3.75, rot: 1, h: 0.35 },
-      "rack": { x: 5, z: -3, rot: 3, h: 0 },
-      "rollPanel": { x: 3.05, z: 1.76, rot: 2, h: 0 },
+      "rack": { x: 4.75, z: -2.65, rot: 1, h: 0 },
+      "rollPanel": { x: 3.05, z: 1.76, rot: 2, h: 0, hidden: true },
       "stands": { x: 1.4, z: -5.1, rot: 0, h: 0 },
       "toolWall": { x: 1.35, z: -5.83, rot: 0, h: 0 },
     },
@@ -3521,9 +3521,6 @@
       { id: "cp-mv29bbwd-4", type: "dcExtBreak", x: -2.05, z: 1.83, rot: 2, h: 0 },
       { id: "cp-mv29dwmf-8", type: "dcClockHall", x: -4.35, z: -2, rot: 1, h: -3.2 },
       { id: "cp-mv29kfix-9", type: "dcFirstAid", x: -1.45, z: 1.83, rot: 2, h: 0 },
-      { id: "cp-mv29ovno-a", type: "fenceSection", x: 8.6, z: 1.6, rot: 0, h: 0 },
-      { id: "cp-mv29p9z9-b", type: "fenceSection", x: 11.9, z: 1.6, rot: 0, h: 0 },
-      { id: "cp-mv29pnrq-c", type: "fenceSection", x: 15.2, z: 1.6, rot: 0, h: 0 },
       { id: "cp-mv29qgis-d", type: "fenceSection", x: 17, z: 3.1, rot: 3, h: 0 },
       { id: "cp-mv29tjuw-e", type: "fenceSection", x: -14.75, z: 1.65, rot: 0, h: 0 },
       { id: "cp-mv29tpj2-f", type: "fenceSection", x: -8.2, z: 1.65, rot: 0, h: 0 },
@@ -3560,7 +3557,7 @@
       { id: "cp-mv2k9mts-18", type: "dcBollard", x: 14.45, z: 20.65, rot: 0, h: 0 },
       { id: "cp-mv2k9mts-19", type: "dcBollard", x: 15.6, z: 20.65, rot: 0, h: 0 },
       { id: "cp-mv2kcnp6-1c", type: "dcDumpster", x: -15.1, z: 18.6, rot: 1, h: 0 },
-      { id: "cp-mv2kehh6-1e", type: "pkPlanter", x: 3.9, z: 2.45, rot: 0, h: 0 },
+      { id: "cp-mv2kehh6-1e", type: "pkPlanter", x: 3.6, z: 3.2, rot: 0, h: 0 },
       { id: "cp-mv2ker4m-1f", type: "pkPlanter", x: -2.85, z: 2.5, rot: 0, h: 0 },
       { id: "cp-mv2kf4nx-1g", type: "pkCone", x: -15.4, z: 6.1, rot: 0, h: 0 },
       { id: "cp-mv2kfmmv-1h", type: "pkCone", x: -13.55, z: 6.05, rot: 0, h: 0 },
@@ -8157,7 +8154,7 @@
     box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, -(FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75); box(FORECOURT.x - 3, 0.12, 0.3, MAT.grey, (FORECOURT.x + 4) / 2, 0.06, FORECOURT.z1 + 0.75);
     // the bay: two white lines and an end mark; the second bay is marked out once the garage has grown
     box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x - 1.5, 0.01, BAY.z); box(0.1, 0.02, 5.4, MAT.whiteLine, BAY.x + 1.5, 0.01, BAY.z); box(3.0, 0.02, 0.1, MAT.whiteLine, BAY.x, 0.01, BAY.z - 2.7);
-    if (grown()) { var B2 = BAYS[1]; box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x + 1.5, 0.01, B2.z); box(3.0, 0.02, 0.1, MAT.whiteLine, B2.x, 0.01, B2.z - 2.7); sign(['BAY 2'], 1.2, 0.3, B2.x, 0.02, B2.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; }
+    if (grown()) { var B2 = BAYS[1]; box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x - 1.5, 0.01, B2.z); box(0.1, 0.02, 5.4, MAT.whiteLine, B2.x + 1.5, 0.01, B2.z); box(3.0, 0.02, 0.1, MAT.whiteLine, B2.x, 0.01, B2.z - 2.7); sign(['BAY 2'], 1.2, 0.3, B2.x, 0.02, B2.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; sign(['BAY 1'], 1.2, 0.3, BAY.x, 0.02, BAY.z - 2.2, 0, { bg: '#1b232c' }).rotation.x = -Math.PI / 2; }
     // the lock-up: a slab, block walls (the roll door opening in the south wall, the side door in the east wall), a roof and two skylights.
     // All of it is one world item, so the editor moves the building as a whole and the rules above follow it
     worldItem('lock-up', function () { G.lockup = WORLD_PARENT;
@@ -8187,6 +8184,10 @@
     hitBox(0.4, 1.4, 0.4, DW / 2 + 0.35, 1.5, Z - 0.22, { prompt: function () { return (S.doorOpen ? 'Pull the chain: close' : 'Pull the chain: open') + ' the roll door'; }, use: function () { S.doorOpen = !S.doorOpen; sfx(S.doorOpen ? 'unlock' : 'lock'); hudDirty = true; } });
     sign(['GARAGE CO.'], 4.2, 0.9, 0, H + 0.75, Z + 0.22, 0, { bg: '#1b232c' });
     buildLift(0);
+    // two invisible markers past either side wall, wider than the side door standing open: the item is centred on its outline when it
+    // is built and its world key ("lock-up@0,0") comes from that centre, so a door saved open must not move it. An open side door
+    // used to shift it to "lock-up@0.35,0", the editor's move of the lock-up no longer matched, and the building stood back at 0,0
+    [-1, 1].forEach(function (s) { box(0.02, 0.02, 0.02, MAT.black, s * (X + 1.5), 0.01, 0).visible = false; });
     }, null);
     if (G.lockup) { G.lockBase = { x: G.lockup.position.x, z: G.lockup.position.z }; G.lockup.userData.movesOnly = true; }   // the rules follow where it stands, not a turn or a new size
     if (G.lockup && grown()) buildHall2();
@@ -8206,10 +8207,15 @@
   // centred, so the item keeps its key and wherever the editor stood the lock-up the new hall stands beside it
   function buildHall2() {
     var g = G.lockup, b = G.lockBase, n0 = solids.length, prev = WORLD_PARENT, X0 = HALL2.x0, X1 = HALL2.x1, Z = LOCKUP.z, H = LOCKUP.h, DW = LOCKUP.doorW, DH = LOCKUP.doorH, cx = (X0 + X1) / 2, W = X1 - X0;
+    // everything below is written in the lock-up's frame as it was built; bx and the inner group take off the item's centring (b), so a
+    // box, a lining and a prop all land where the numbers say
+    var inner = new THREE.Group(); inner.position.set(-b.x, 0, -b.z); g.add(inner);
     WORLD_PARENT = g;
     try {
       var bx = function (w, h, d, mat, x, y, z) { return box(w, h, d, mat, x - b.x, y, z - b.z); };
+      var cl = function (r, h, mat, x, y, z, seg) { return cyl(r, h, mat, x - b.x, y, z - b.z, null, seg || 14); };
       var sol = function (x0, x1, z0, z1) { solid(x0, x1, z0, z1); };
+      var glass = std({ color: 0xa8c8dc, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.32 }), frame = std({ color: 0x2b3036, roughness: 0.5, metalness: 0.4 });
       var slab = plane(W, 2 * Z, MAT.floor, cx - b.x, 0.01, -b.z, -Math.PI / 2); slab.receiveShadow = true;
       bx(W + 0.3, H, 0.3, MAT.block, cx, H / 2, -Z); sol(X0, X1 + 0.15, -Z - 0.15, -Z + 0.15);
       bx(0.3, H, 2 * Z + 0.3, MAT.block, X1, H / 2, 0); sol(X1 - 0.15, X1 + 0.15, -Z - 0.15, Z + 0.15);
@@ -8217,41 +8223,95 @@
       bx(d0 - X0, H, 0.3, MAT.block, (X0 + d0) / 2, H / 2, Z); bx(X1 - d1, H, 0.3, MAT.block, (d1 + X1) / 2, H / 2, Z); bx(DW + 0.4, H - DH, 0.3, MAT.block, HALL2.doorX, DH + (H - DH) / 2, Z);
       sol(X0, d0, Z - 0.15, Z + 0.15); sol(d1, X1 + 0.15, Z - 0.15, Z + 0.15);
       bx(W + 0.6, 0.25, 2 * Z + 0.6, MAT.roof, cx, H + 0.125, 0); plane(W, 2 * Z, MAT.roofIn, cx - b.x, H - 0.01, -b.z, Math.PI / 2);
-      // windows high on the long walls: light in, no view of the street at eye height
+      // daylight: two skylights in the roof, and a row of three windows high in the back wall, framed and glazed inside and out
       [cx - 2.5, cx + 2.5].forEach(function (x) { var sk = plane(1.6, 1.2, MAT.skylight, x - b.x, H - 0.02, -1 - b.z, Math.PI / 2); lampMeshes.push(sk); });
-      [cx - 3, cx, cx + 3].forEach(function (x) { bx(1.6, 0.5, 0.06, MAT.skylight, x, H - 0.55, -Z + 0.17); });
+      [cx - 3, cx, cx + 3].forEach(function (x) {
+        [-1, 1].forEach(function (s) {
+          var z = -Z + s * 0.17; bx(1.6, 0.5, 0.02, s > 0 ? MAT.skylight : glass, x, H - 0.75, z + s * 0.01);
+          bx(1.7, 0.06, 0.05, frame, x, H - 0.47, z + s * 0.02); bx(1.7, 0.06, 0.05, frame, x, H - 1.03, z + s * 0.02);
+          [-0.82, 0, 0.82].forEach(function (dx) { bx(0.05, 0.56, 0.05, frame, x + dx, H - 0.75, z + s * 0.02); });
+        });
+      });
       [-1.5, 1.5].forEach(function (z) { bx(W - 0.4, 0.3, 0.2, MAT.steelDark, cx, H - 0.25, z); });
       [[cx - 2.5, -1.5], [cx + 2.5, 1.5]].forEach(function (p) { highBay(p[0] - b.x, H - 0.95, p[1] - b.z, H); var l = new THREE.PointLight(0xffeacc, 0.6, 14, 2); l.position.set(p[0] - b.x, H - 1.2, p[1] - b.z); g.add(l); G.lamps.push(l); });
       // the roll door onto bay 2, on a chain like the first
       G.roll2 = new THREE.Group(); G.roll2.userData.dynamic = true; G.roll2.position.set(HALL2.doorX - b.x, 0, Z - b.z); g.add(G.roll2);
       G.roll2Panel = box(DW, DH, 0.08, MAT.door, 0, DH / 2, 0, G.roll2); G.roll2Panel.castShadow = false;
+      bx(0.12, DH + 0.1, 0.2, MAT.steelDark, d0 - 0.06, (DH + 0.1) / 2, Z); bx(0.12, DH + 0.1, 0.2, MAT.steelDark, d1 + 0.06, (DH + 0.1) / 2, Z);
       bx(DW + 0.4, 0.42, 0.46, MAT.steelDark, HALL2.doorX, DH + 0.24, Z - 0.3);
-      hitBox(0.4, 1.4, 0.4, HALL2.doorX + DW / 2 + 0.35 - b.x, 1.5, Z - 0.22 - b.z, { prompt: function () { return (S.door2Open ? 'Pull the chain: close' : 'Pull the chain: open') + ' the bay 2 roll door'; }, use: function () { S.door2Open = !S.door2Open; sfx(S.door2Open ? 'unlock' : 'lock'); hudDirty = true; } });
+      cl(0.012, 1.3, MAT.chrome, d1 + 0.35, 1.55, Z - 0.22, 6);
+      hitBox(0.4, 1.4, 0.4, d1 + 0.35 - b.x, 1.5, Z - 0.22 - b.z, { prompt: function () { return (S.door2Open ? 'Pull the chain: close' : 'Pull the chain: open') + ' the bay 2 roll door'; }, use: function () { S.door2Open = !S.door2Open; sfx(S.door2Open ? 'unlock' : 'lock'); hudDirty = true; } });
       sign(['BAY 2'], 1.6, 0.5, HALL2.doorX - b.x, H + 0.55, Z + 0.22 - b.z, 0, { bg: '#1b232c' });
-      // the parts store: shelving along the back wall, west half (the stock boxes on it are drawn by 02-stock.js)
+      // the parts store: shelving along the back wall, west half (the stock boxes on it are drawn by 02-stock.js), with labelled bins on
+      // the top shelf and a stack of tyres at its end
       G.store2 = new THREE.Group(); G.store2.position.set(X0 + 2.4 - b.x, 0, -Z + 0.55 - b.z); g.add(G.store2);
       [-1.9, 0, 1.9].forEach(function (x) { box(0.05, 2.2, 0.5, MAT.rack, x, 1.1, 0, G.store2); }); [0.35, 0.95, 1.55, 2.1].forEach(function (y) { box(3.85, 0.04, 0.5, MAT.steel, 0, y, 0, G.store2); });
+      var binCols = [0x2c5f9e, 0x2c5f9e, 0xc8342a, 0xe0a02a, 0x2c5f9e, 0x5f9e5a, 0xc8342a, 0x2c5f9e];
+      binCols.forEach(function (c, i) { var bm = std({ color: c, roughness: 0.6 }), x = -1.68 + i * 0.48; box(0.4, 0.22, 0.4, bm, x, 2.23, 0.02, G.store2); box(0.18, 0.06, 0.004, MAT.paper, x, 2.24, 0.223, G.store2); });
+      [0.35, 0.95, 1.55, 2.1].forEach(function (y) { box(3.85, 0.05, 0.01, std({ color: 0xe0a02a, roughness: 0.6 }), 0, y - 0.005, 0.255, G.store2); });
       sol(X0 + 0.45, X0 + 4.35, -Z + 0.25, -Z + 0.85);
       G.store2Boxes = new THREE.Group(); G.store2Boxes.userData.dynamic = true; G.store2.add(G.store2Boxes);
       hitBox(3.8, 2.0, 0.6, X0 + 2.4 - b.x, 1.1, -Z + 0.6 - b.z, { prompt: function () { return rackPrompt(); }, use: function () { rackUse(); } });
-      // the office: two glazed walls in the north-east corner, a door gap, a desk with the second PC (a prop, so it can be moved)
-      var ox0 = X1 - 4, oz1 = -0.6;
-      bx(0.12, H - 0.4, 3.4 - 1.0, MAT.plaster, ox0, (H - 0.4) / 2, -Z + 1.7 - 0.5); sol(ox0 - 0.06, ox0 + 0.06, -Z, oz1 - 1.0);
-      bx(0.12, H - 2.5, 1.0, MAT.plaster, ox0, 2.1 + (H - 2.5) / 2, oz1 - 0.5);
-      bx(4.0, 1.0, 0.12, MAT.plaster, X1 - 2, 0.5, oz1); bx(4.0, 0.8, 0.06, MAT.skylight, X1 - 2, 1.4, oz1); bx(4.0, H - 2.2, 0.12, MAT.plaster, X1 - 2, 1.8 + (H - 2.2) / 2, oz1); sol(ox0, X1, oz1 - 0.06, oz1 + 0.06);
+      sign(['PARTS STORE'], 1.3, 0.28, X0 + 2.4 - b.x, 2.75, -Z + 0.18 - b.z, 0, { bg: '#1b232c' });
+      var tm = gcMats(); for (var t = 0; t < 4; t++) { var ty = gcMesh(gcTyreGeo(), tm.tyre, inner, X0 + 4.95, 0.115 + t * 0.225, -Z + 0.6); ty.rotation.y = t * 0.4; }
+      sol(X0 + 4.6, X0 + 5.3, -Z + 0.25, -Z + 0.95);
+      // the office in the north-east corner: block-and-glass walls with a door frame, the second PC on its desk (a prop, so it moves),
+      // a filing cabinet, a chair, a clock and a plant
+      var ox0 = X1 - 4, oz1 = -0.6, oh = H - 0.4;
+      bx(0.12, 1.0, 2.4, MAT.plaster, ox0, 0.5, -Z + 1.2); bx(0.12, 0.8, 2.4, glass, ox0, 1.4, -Z + 1.2); bx(0.12, oh - 1.8, 2.4, MAT.plaster, ox0, 1.8 + (oh - 1.8) / 2, -Z + 1.2);
+      [-Z + 0.05, -Z + 1.2, -Z + 2.35].forEach(function (z) { bx(0.14, 0.84, 0.05, frame, ox0, 1.4, z); }); bx(0.14, 0.05, 2.4, frame, ox0, 1.0, -Z + 1.2); bx(0.14, 0.05, 2.4, frame, ox0, 1.8, -Z + 1.2);
+      sol(ox0 - 0.06, ox0 + 0.06, -Z, oz1 - 1.0);
+      bx(0.12, oh - 2.1, 1.0, MAT.plaster, ox0, 2.1 + (oh - 2.1) / 2, oz1 - 0.5);
+      bx(0.16, 2.12, 0.06, frame, ox0, 1.06, oz1 - 1.0); bx(0.16, 2.12, 0.06, frame, ox0, 1.06, oz1); bx(0.16, 0.06, 1.06, frame, ox0, 2.1, oz1 - 0.5);
+      bx(4.0, 1.0, 0.12, MAT.plaster, X1 - 2, 0.5, oz1); bx(4.0, 0.8, 0.12, glass, X1 - 2, 1.4, oz1); bx(4.0, oh - 1.8, 0.12, MAT.plaster, X1 - 2, 1.8 + (oh - 1.8) / 2, oz1); sol(ox0, X1, oz1 - 0.06, oz1 + 0.06);
+      [ox0 + 0.05, X1 - 3, X1 - 2, X1 - 1, X1 - 0.1].forEach(function (x) { bx(0.05, 0.84, 0.14, frame, x, 1.4, oz1); }); bx(4.0, 0.05, 0.14, frame, X1 - 2, 1.0, oz1); bx(4.0, 0.05, 0.14, frame, X1 - 2, 1.8, oz1);
       sign(['OFFICE'], 0.9, 0.24, ox0 - 0.07 - b.x, 2.3, -2.8 - b.z, -Math.PI / 2, { bg: '#1b232c' });
-      // the waiting corner: two chairs and a coffee machine by the front wall
+      bx(0.45, 1.3, 0.6, MAT.steelDark, X1 - 0.45, 0.65, -Z + 2.4); [0.35, 0.75, 1.15].forEach(function (y) { bx(0.3, 0.03, 0.01, MAT.chrome, X1 - 0.45, y, -Z + 2.705); });
+      sol(X1 - 0.7, X1 - 0.2, -Z + 2.1, -Z + 2.7);
+      cl(0.22, 0.04, MAT.black, X1 - 2.3, 0.45, -Z + 1.6, 16); cl(0.03, 0.42, MAT.steelDark, X1 - 2.3, 0.22, -Z + 1.6, 8); bx(0.42, 0.45, 0.06, MAT.black, X1 - 2.3, 0.72, -Z + 1.82);
+      cl(0.16, 0.03, MAT.white, X1 - 2, 2.5, -Z + 0.19, 20).rotation.x = Math.PI / 2;
+      cl(0.14, 0.3, MAT.grey, ox0 + 0.35, 0.15, -Z + 0.35, 12); sphere(0.28, std({ color: 0x4f7f3a, roughness: 1 }), ox0 + 0.35 - b.x, 0.55, -Z + 0.35 - b.z);
+      // the waiting corner by the door: two chairs, a low table with magazines, a coffee machine, a plant and a sign
       [X1 - 2.2, X1 - 1.4].forEach(function (x) { bx(0.5, 0.06, 0.5, MAT.red, x, 0.45, Z - 0.7); bx(0.5, 0.5, 0.06, MAT.red, x, 0.72, Z - 0.45); bx(0.04, 0.45, 0.04, MAT.steelDark, x, 0.22, Z - 0.7); });
       bx(0.5, 1.5, 0.5, MAT.black, X1 - 0.5, 0.75, Z - 0.6); bx(0.36, 0.3, 0.04, glowMat(0xf5b53d, 0.5), X1 - 0.5, 1.15, Z - 0.84);
-      sol(X1 - 2.5, X1 - 0.2, Z - 1.0, Z - 0.3);
-      // the doorway between the halls is the old side door; its box keeps the lights apart a little
+      bx(0.7, 0.04, 0.45, MAT.wood, X1 - 1.8, 0.4, Z - 1.35); [-0.3, 0.3].forEach(function (dx) { bx(0.04, 0.38, 0.4, MAT.steelDark, X1 - 1.8 + dx, 0.19, Z - 1.35); });
+      bx(0.22, 0.01, 0.3, MAT.paper, X1 - 1.95, 0.425, Z - 1.35); bx(0.22, 0.01, 0.3, std({ color: 0xc8342a, roughness: 0.8 }), X1 - 1.66, 0.425, Z - 1.3);
+      cl(0.16, 0.34, MAT.grey, X1 - 2.85, 0.17, Z - 0.5, 12); sphere(0.3, std({ color: 0x4f7f3a, roughness: 1 }), X1 - 2.85 - b.x, 0.6, Z - 0.5 - b.z);
+      sign(['WAITING AREA'], 1.1, 0.26, X1 - 0.18 - b.x, 2.2, Z - 1.4 - b.z, -Math.PI / 2, { bg: '#1b232c' });
+      sol(X1 - 2.5, X1 - 0.2, Z - 1.6, Z - 0.3);
+      // the working side of bay 2: a workbench and a red tool chest along the east wall, an oil drum and a safety notice on the back wall
+      bx(0.7, 0.06, 1.6, MAT.wood, X1 - 0.5, 0.9, 1.3); bx(0.64, 0.5, 1.5, MAT.steelDark, X1 - 0.5, 0.3, 1.3); bx(0.4, 0.25, 0.3, MAT.red, X1 - 0.5, 1.06, 0.8); bx(0.05, 0.6, 1.6, MAT.cork, X1 - 0.17, 1.55, 1.3);
+      sol(X1 - 0.85, X1 - 0.15, 0.5, 2.1);
+      bx(0.6, 1.0, 0.45, MAT.red, X1 - 0.4, 0.5, -0.1); [0.2, 0.4, 0.6, 0.8].forEach(function (y) { bx(0.5, 0.012, 0.01, MAT.chrome, X1 - 0.4, y, -0.33); }); bx(0.62, 0.04, 0.47, MAT.black, X1 - 0.4, 1.02, -0.1);
+      sol(X1 - 0.7, X1 - 0.1, -0.35, 0.15);
+      cl(0.3, 0.9, MAT.blue, X0 + 5.6, 0.45, -Z + 0.5, 16); sol(X0 + 5.3, X0 + 5.9, -Z + 0.2, -Z + 0.8);
+      sign(['SAFETY FIRST', 'lift arms locked before you go under'], 1.3, 0.4, X0 + 5.6 - b.x, 1.9, -Z + 0.17 - b.z, 0, { bg: '#f3c843', fg: '#1b232c' });
+      // the linings: painted plaster inside on all four walls, the roll door and the side door left open, the floor's skirting with them
+      WORLD_PARENT = inner;
       lineWall('z', -Z, X0, X1, H - 0.4, MAT.plaster, [], 1, { inset: 0.16 }); lineWall('x', X1, -Z, Z, H - 0.4, MAT.plaster, [], -1, { inset: 0.16 });
+      lineWall('z', Z, X0, X1, H - 0.4, MAT.plaster, [[d0, d1, DH]], -1, { inset: 0.16 }); lineWall('x', X0, -Z, Z, H - 0.4, MAT.plaster, [[1.6, 2.6, 2.25]], 1, { inset: 0.16 });
+      WORLD_PARENT = g;
       buildLift(1, b.x, b.z);
     } finally { WORLD_PARENT = prev; }
     // the solids of the new hall are in the lock-up's frame as built; they join the item's own so an editor move takes them along
     var mine = solids.slice(n0); g.userData.solids = (g.userData.solids || []).concat(mine);
     tickRoll2(1);
   }
+  // what you placed in the editor where the new hall stands (a tree, a fence, a lamp post) cannot stand inside it: once the world is
+  // built and baked, those world items are put away, their solids with them, and the bake is made again. Props are cleared the night
+  // the garage grows (02-jobs.js, growClear)
+  function hall2Clash() {
+    if (!grown() || !G.lockup) return []; var o = LO(), x0 = o.x + HALL2.x0 + 0.2, x1 = o.x + HALL2.x1 + 0.15, z0 = o.z + HALL2.z0 - 0.15, z1 = o.z + HALL2.z1 + 0.15;
+    return WORLD_ITEMS.filter(function (it) {
+      if (it === G.lockup || !it.visible) return false; var bb = new THREE.Box3().setFromObject(it); if (bb.isEmpty() || bb.max.x - bb.min.x > 8 || bb.max.z - bb.min.z > 8) return false;
+      return !(bb.max.x < x0 || bb.min.x > x1 || bb.max.z < z0 || bb.min.z > z1);
+    });
+  }
+  hook('boot', function () {
+    var list = hall2Clash(), n = list.length;
+    list.forEach(function (it) { it.visible = false; (it.userData.solids || []).forEach(function (s) { var k = solids.indexOf(s); if (k >= 0) solids.splice(k, 1); }); });
+    if (n) { rebake(); navSetup({ x0: -PLOT.x, z0: PLOT.z0, width: 2 * PLOT.x, depth: PLOT.z1 - PLOT.z0 + 2, cell: 0.4 }); G.hall2Cleared = n; }
+  });
   // the roll door rides up into its box while open, or while a customer walks through; the shadow map follows it
   function tickRoll(dt) {
     var want = S.doorOpen || G.customerNearDoor ? 1 : 0;
@@ -8528,6 +8588,7 @@
     P.pan = gcGrp(g, 0.98, 0, 0.8); P.pan.visible = false; cyl(0.25, 0.08, M.black, 0, 0.04, 0, P.pan, 22); P.panOil = cyl(0.23, 0.01, M.oil, 0, 0.02, 0, P.pan, 22); P.panPlug = cyl(0.018, 0.03, M.alu, 0.1, 0.06, -0.08, P.pan, 6);
     P.stream = cyl(0.009, 1, M.oil, 0.98, 0.1, 0.68, g, 6); P.stream.visible = false; P.stream.castShadow = false;
     // the wheel nuts once they are off: in a little pile by the wheel
+    P.floorParts = gcGrp(g, 2.0, 0, 1.4); P.floorParts.userData.key = '';
     P.nutPile = gcGrp(g, 1.0, 0, 1.35); P.nutPile.visible = false; [[0, 0], [0.04, 0.01], [-0.03, 0.03], [0.02, -0.04], [-0.04, -0.02]].forEach(function (n) { cyl(0.013, 0.026, M.alu, n[0], 0.013, n[1], P.nutPile, 6); });
     // the jug and the coolant bottle that pour while a fill step fills
     P.can = gcGrp(g, 1.36, 1.2, 0.36); P.can.visible = false; gcMesh(bevelGeo(0.16, 0.22, 0.1, 0.02), M.yellow, P.can, 0, 0, 0); cyl(0.02, 0.06, M.black, 0.09, -0.1, 0, P.can, 8).rotation.z = 1.0; P.can.rotation.z = 0.9;
@@ -8625,6 +8686,16 @@
     P.coils.forEach(function (c, i) { c.position.y = c.userData.base + coilUp * (0.12 + i * 0.01); }); P.plugs.forEach(function (pl) { pl.position.y = pl.userData.base + plugUp * 0.16; pl.children[0].material = sm; });
     // the wipers lift off the glass while the blades are changed
     var wl = gcEase(A, 'wip', live('wipers') ? Math.sin(p * Math.PI) : 0, 12, snap, dt); P.wipers.forEach(function (w) { w.rotation.x = wl * 0.9; });
+    // the new parts waiting by the car: taken off the rack, out of your hands, not yet fitted (a fit step past half way has put it in)
+    var waiting = [];
+    if (J && J.state === 'taken' && !(S.hand && S.hand.kind === 'parts' && S.hand.bay === b)) {
+      var st = stepsOf(J), got = {}, fit = {};
+      for (var si = 0; si < st.length; si++) { var x = st[si]; if (si < J.step) { if (x.act === 'fetch') got[x.fault] = true; if (x.fit) fit[x.fault] = true; } else if (si === J.step && x.fit && J.stepP > 0 && (x.anim === 'oilfill' || x.anim === 'coolant' || J.stepP > 0.5)) fit[x.fault] = true; }
+      Object.keys(got).forEach(function (f) { if (!fit[f]) (faultById(f).parts || []).forEach(function (pt) { waiting.push(pt); }); });
+    }
+    var wkey = waiting.join(',');
+    if (wkey !== P.floorParts.userData.key) { while (P.floorParts.children.length) P.floorParts.remove(P.floorParts.children[0]); waiting.forEach(function (pt, i) { var pm = gcPartMesh(pt); pm.position.set((i % 3) * 0.26, 0, Math.floor(i / 3) * 0.3); pm.rotation.y = 0.3 * i; P.floorParts.add(pm); }); P.floorParts.userData.key = wkey; }
+    P.floorParts.position.y = -h;
     // the exhaust: the old silencer is unbolted and lowered to the floor, the new one (bright) is lifted into place and bolted on
     var exT = live('exhoff') ? p : live('exhon') ? 1 - p : (done('exhoff') && !done('exhon') && !over) ? 1 : 0; exT = gcEase(A, 'exh', exT, 10, snap, dt);
     P.silencer.position.y = P.silencerBase + (-h + 0.08 - P.silencerBase) * exT; P.silencer.rotation.x = exT * 0.15;
@@ -8701,7 +8772,7 @@
         var g = new THREE.Group(); g.userData.dynamic = true; H.g = g; scene.add(g);
         if (S.tool) { var tm = gcToolMesh(S.tool); tm.position.set(0.26, -0.27, -0.45); tm.rotation.set(-0.5, 0.45, 0.75); tm.scale.set(0.6, 0.6, 0.6); g.add(tm); H.tool = tm; } else H.tool = null;
         if (S.hand && S.hand.kind === 'wheel') { var wm = gcWheelMesh(1); wm.position.set(-0.05, -0.42, -0.62); wm.rotation.set(0.3, 0.4, 0); wm.scale.set(0.9, 0.9, 0.9); g.add(wm); }
-        else if (S.hand && S.hand.kind === 'parts') { var J = jobAt(S.hand.bay), list = J ? partsOf(J.faults || []) : []; if (list.length) { var pm = gcPartMesh(list[0]); pm.position.set(-0.16, -0.3, -0.45); pm.rotation.set(0.2, 0.5, 0); g.add(pm); } }
+        else if (S.hand && S.hand.kind === 'parts') { var J = jobAt(S.hand.bay), list = J ? partsOf(J.faults || []) : []; if (list.length) { var pm = gcPartMesh(list[0]); pm.position.set(-0.24, -0.34, -0.62); pm.rotation.set(0.25, 0.6, 0); pm.scale.set(0.55, 0.55, 0.55); g.add(pm); } }
         g.traverse(function (o) { o.castShadow = false; o.receiveShadow = false; });
       }
     }
@@ -8740,7 +8811,7 @@
     if (s && s.at === 'lift') { var why = stepBlock(b, s); return why ? s.label + ': ' + why : verb(s) + s.label + (J.stepP > 0 ? ' · ' + Math.round(J.stepP * 100) + '%' : ''); }
     return 'The lift: ' + J.car.make + (J.vis && J.vis.up ? ', up' : ', down') + (s ? ' · next: ' + s.label : '');
   }
-  function liftUse(i) { var b = liftCar(i); if (b < 0) return; var J = jobAt(b), s = curStep(J); if (!s || s.at !== 'lift') { toast(s ? 'Next: ' + s.label + ' (' + placeName(s.at) + ').' : 'Nothing to do on the lift.', ''); return; } var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; } J.by = 'player'; G.hold = { bay: b, step: J.step, at: 'lift', fill: false }; }
+  function liftUse(i) { var b = liftCar(i); if (b < 0) return; var J = jobAt(b), s = curStep(J); if (!s || s.at !== 'lift') { toast(s ? 'Next: ' + s.label + ' (' + placeName(s.at) + ').' : 'Nothing to do on the lift.', ''); return; } var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; } J.by = 'player'; setPartsDown(b); G.hold = { bay: b, step: J.step, at: 'lift', fill: false }; }
   // a jack step becomes a lift step while the car is on a lift: quicker, and the car goes up to working height
   function liftStep(J, s) { if (J.lift === null || J.lift === undefined || s.at !== 'jack') return s; return { at: 'lift', act: 'hold', secs: s.secs * 0.6, tool: null, label: s.fx === 'up' ? 'Raise the car on the lift' : 'Lower the lift', fx: s.fx, fault: s.fault }; }
   // the height the car stands at now: on a lift it rises as the step fills
@@ -9519,7 +9590,11 @@
     exhaust: [fetchStep('an exhaust section'), JACK_UP, ['exhaust', 'hold', 3, 'spanner', 'Unbolt the old exhaust section', null, 'exhoff'], ['exhaust', 'hold', 3, 'spanner', 'Bolt the new section on', null, 'exhon'], LOWER],
     discs: [fetchStep('the discs and pads'), JACK_UP, NUTS_OFF, WHEEL_OFF, ['hub', 'hold', 5, 'spanner', 'Swap the discs and pads', null, 'discs'], ['hub', 'press', 0, null, 'Wheel back on', 'wheelon'], NUTS_ON, LOWER]
   };
-  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, anim: a[6] || null, fault: fid }; }
+  // the steps that fit the new part: once one is done the parts you took off the rack are in the car, not in your hands
+  var FIT_ANIMS = ['oilfill', 'pads', 'discs', 'bulb', 'battery', 'wipers', 'airfilter', 'plugs', 'coolant', 'exhon'];
+  // starting work on the car puts the parts you carried from the rack down on the floor beside it (02-car.js draws them there)
+  function setPartsDown(b) { if (S.hand && S.hand.kind === 'parts' && S.hand.bay === b) { S.hand = null; sfx('putdown'); hudDirty = true; } }
+  function mkStep(a, fid) { return { at: a[0], act: a[1], secs: a[2], tool: a[3], label: a[4], fx: a[5] || null, anim: a[6] || null, fit: FIT_ANIMS.indexOf(a[6]) >= 0, fault: fid }; }
   // a job's steps: each fault's in turn (a second fault the customer said yes to comes after the first)
   function stepsOf(J) { var out = []; jobFaults(J).forEach(function (fid) { (STEPS[fid] || []).forEach(function (a) { out.push(liftStep(J, mkStep(a, fid))); }); }); return out; }
   function curStep(J) { if (!J || J.state !== 'taken') return null; return stepsOf(J)[J.step] || null; }
@@ -9683,7 +9758,7 @@
     var J = jobAt(b); if (diagnosing(J)) { diagUse(b, at); return; }
     var s = curStep(J); if (!s || s.at !== at) return;
     var why = stepBlock(b, s); if (why) { toast(s.label + ': ' + why + '.', 'bad'); return; }
-    J.by = 'player';
+    J.by = 'player'; setPartsDown(b);
     if (s.act === 'press' || s.act === 'wheel') { if (s.act === 'wheel' && S.hand && S.hand.kind === 'wheel') S.hand = null; doStep(b, 'player'); return; }
     if (s.act === 'hold' || s.act === 'fill') { G.hold = { bay: b, step: J.step, at: at, fill: s.act === 'fill' }; }
   }
@@ -9713,6 +9788,7 @@
     var J = jobAt(b), s = curStep(J); if (!s) return false;
     if (s.act === 'fetch' && by !== 'player') { if (!takeParts(b, s)) return false; }
     stepFx(b, s.fx);
+    if (s.fit && S.hand && S.hand.kind === 'parts' && S.hand.bay === b) S.hand = null;
     if (s.fx === 'wheeloff' && by === 'player' && stepsOf(J).slice(J.step + 1).some(function (x) { return x.at === 'tyre'; })) S.hand = { kind: 'wheel', bay: b, label: J.car.name + "'s wheel" };
     J.step++; J.stepP = 0; J.over = false; J.hold = null; addXp(1);
     // the last step: start it up. A wrong name shows now (finding the fault, above)
@@ -9756,6 +9832,58 @@
   GAME.hitPriority = function (hs, first) { var d = hs.object.userData.it, f = first && first.object.userData.it; return !!(d && d.gc && f && f.gcCar !== undefined && d.prompt()); };
   // the HUD line for your hands
   function handLine() { var t = S.tool ? TOOLS[S.tool].name : 'no tool', h = S.hand ? S.hand.label : ''; return t + (h ? ' · ' + h : ''); }
+
+  // ── The marker ────────────────────────────────────────────────────
+  // what to do next is marked where it is: a bobbing amber arrow over it and a glowing outline round it, seen through the car. It follows
+  // the job you are on (the one you have worked, or the nearest): the customer to take the job or the payment, the tool on the wall
+  // when the next step wants one you are not holding, the parts rack, the place on the car (the step, or a check while the fault is
+  // found), the lift's control box, the tyre corner. Nothing while you drive, or while a worker has the car
+  function markerJob() {
+    var best = -1, bd = 1e9;
+    for (var b = 0; b < bayCount(); b++) { var J = jobAt(b), C = carIn(b); if (!J || !C || J.state === 'coming' || J.state === 'paid' || J.state === 'leaving') continue; if (J.assign && staffById(J.assign)) continue; if (S.hand && S.hand.bay === b) return b; if (J.state === 'taken' && J.by === 'player') return b; var d = dist2(player.x, player.z, C.x, C.z); if (d < bd) { bd = d; best = b; } }
+    return best;
+  }
+  // the target: a world point, a size, a turn (the outline is aligned with what it marks) and a key for the tests
+  function markerTarget() {
+    if (G.drive) return null; var b = markerJob(); if (b < 0) return null; var J = jobAt(b), C = carIn(b), cu = customerIn(b);
+    var onCar = function (at) { var P = PLACES[at]; if (!P || !P.p) return null; C.g.updateMatrixWorld(true); var w = C.g.localToWorld(new THREE.Vector3(P.p[0], P.p[1], P.p[2])); return { x: w.x, y: w.y, z: w.z, s: P.s, ry: C.g.rotation.y, key: 'car:' + at }; };
+    var onObj = function (g, dy, s, key) { if (!g) return null; g.updateMatrixWorld(true); var w = new THREE.Vector3(); g.getWorldPosition(w); var q = new THREE.Quaternion(); g.getWorldQuaternion(q); var e = new THREE.Euler().setFromQuaternion(q, 'YXZ'); return { x: w.x, y: w.y + dy, z: w.z, s: s, ry: e.y, key: key }; };
+    var tool = function (t) { var H = G.toolHooks && G.toolHooks[t]; return H ? onObj(H.hook, 0, [0.26, 0.6, 0.14], 'tool:' + t) : null; };
+    if ((J.state === 'waiting' || J.state === 'done') && cu && !cu.walking) return onObj(cu.g, 0.95, [0.8, 1.95, 0.8], 'customer');
+    if (J.state !== 'taken') return null;
+    if (diagnosing(J)) {
+      var ck = checksFor(J)[0]; if (!ck) return null; var K = CHECKS[ck];
+      if (K.tool && S.tool !== K.tool) return tool(K.tool);
+      if (PLACES[K.at].bay && !(J.vis && J.vis.open)) return onCar('bonnet');
+      return onCar(K.at);
+    }
+    var s = curStep(J); if (!s) return null;
+    if (s.tool && S.tool !== s.tool && toolOwned(s.tool)) return tool(s.tool);
+    if (s.act === 'fetch') { var R = propInst.rack; return R ? onObj(R.g, 1.0, [1.95, 1.95, 0.5], 'rack') : null; }
+    if (s.at === 'lift') { var L = liftWorld(J.lift || 0); return { x: L.x - 1.5, y: 1.25, z: L.z + 0.25, s: [0.32, 0.42, 0.22], ry: 0, key: 'lift' }; }
+    if (s.at === 'tyre') { var T2 = roomInst('gcTyre'); return T2 ? onObj(T2.g, 0.9, [1.6, 1.4, 1.2], 'tyre') : null; }
+    if (PLACES[s.at] && PLACES[s.at].bay && !(J.vis && J.vis.open)) return onCar('bonnet');
+    return onCar(s.at);
+  }
+  function markerBuild() {
+    var amber = new THREE.MeshBasicMaterial({ color: 0xffb53d, transparent: true, opacity: 0.95, depthTest: false }), g = new THREE.Group(); g.userData.dynamic = true; g.renderOrder = 999;
+    var arrow = new THREE.Group(); g.add(arrow);
+    var head = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 14), amber); head.rotation.x = Math.PI; arrow.add(head);
+    var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.18, 10), amber); stem.position.y = 0.19; arrow.add(stem);
+    var line = new THREE.LineBasicMaterial({ color: 0xffb53d, transparent: true, opacity: 0.9, depthTest: false });
+    var box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), line); g.add(box);
+    [head, stem, box].forEach(function (m) { m.renderOrder = 999; m.castShadow = false; m.frustumCulled = false; });
+    scene.add(g); G.marker = { g: g, arrow: arrow, box: box, line: line, amber: amber, at: null };
+    return G.marker;
+  }
+  function markerSync(dt) {
+    var t = markerTarget(), M = G.marker || (t ? markerBuild() : null); if (!M) return;
+    M.at = t ? t.key : null; M.g.visible = !!t; if (!t) return;
+    var pulse = 0.55 + 0.45 * Math.sin(worldTime * 5);
+    M.box.position.set(t.x, t.y, t.z); M.box.rotation.set(0, t.ry || 0, 0); M.box.scale.set(t.s[0] + 0.06, t.s[1] + 0.06, t.s[2] + 0.06);
+    M.arrow.position.set(t.x, t.y + t.s[1] / 2 + 0.28 + Math.sin(worldTime * 3) * 0.06, t.z); M.arrow.rotation.y += (dt || 0) * 1.5;
+    M.line.opacity = 0.35 + 0.55 * pulse; M.amber.opacity = 0.7 + 0.3 * pulse;
+  }
   // ── The shell ─────────────────────────────────────────────────────
   GAME.hud = function () {
     var j = $('h-jobs'); if (j) j.textContent = S.stats.jobs + (S.stats.jobs === 1 ? ' job' : ' jobs');
@@ -9851,7 +9979,7 @@
   GAME.onEnter = function (loaded) { if (!loaded) { S.time = OPEN_AT; logEvent('Welcome to Garage Co. This is your lock-up. Pull the chain to open the roll door; the first car is due at a quarter past eight. The PC on the desk orders parts.', 'rare'); save(); } else logEvent('Back at the garage. Day ' + S.day + ', ' + fmtTime(S.time) + '.'); G.nextCarAt = worldTime + 12; };
   GAME.menuCamera = function (dt) { var t = worldTime * 0.05; camera.position.set(9 + Math.sin(t) * 2.5, 2.4, 13 + Math.cos(t) * 1.5); camera.lookAt(0, 1.6, LOCKUP.z - 1); };
   GAME.tick = function (dt) { tickTime(dt); tickCars(dt); tickCustomers(dt); workTick(dt); tickVan(dt); staffTick(dt); for (var b = 0; b < bayCount(); b++) gcCarAnimate(b, dt); };
-  GAME.present = function (dt) { tickRoll(dt); tyreWheelSync(); liftSync(); gcHeldSync(dt); };
+  GAME.present = function (dt) { tickRoll(dt); tyreWheelSync(); liftSync(); gcHeldSync(dt); markerSync(dt); };
   GAME.hiddenTick = function (dt) { tickRoll(dt); };
   GAME.T = function () {
     return { GAME: GAME, G: G, traffic: traffic, FAULTS: FAULTS, PARTS: PARTS, STEPS: STEPS, PLACES: PLACES, nearTyre: nearTyre, tyreSpot: tyreSpot, staffById: staffById, propPlacement: propPlacement, drawScreens: drawScreens, saveNow: saveNow, TOOLS: TOOLS, UPGRADES: UPGRADES, ROLES: ROLES, LOCKUP: LOCKUP, HALL2: HALL2, FORECOURT: FORECOURT, BAY: BAY, BAYS: BAYS, DESK: DESK, DESK_STAND: DESK_STAND, ROAD_Z: ROAD_Z, PC: PC,
@@ -9859,7 +9987,7 @@
       newCar: newCar, spawnCar: spawnCar, removeCar: removeCar, placeCar: placeCar, spawnCustomer: spawnCustomer, removeCustomer: removeCustomer, restoreJobs: restoreJobs, takeJob: takeJob, takePayment: takePayment, offerExtra: offerExtra, addXp: addXp, xpFor: xpFor, tickRoll: tickRoll, dayEnd: dayEnd, repChange: repChange,
       stepsOf: stepsOf, curStep: curStep, doStep: doStep, placeUse: placeUse, placePrompt: placePrompt, rackUse: rackUse, rackPrompt: rackPrompt, toolUse: toolUse, stepBlock: stepBlock, missingParts: missingParts, carVis: carVis, tyreUse: tyreUse, tyrePrompt: tyrePrompt,
       orderParts: orderParts, putAway: putAway, stockTotal: stockTotal, stockCap: stockCap, onOrder: onOrder, buyUpgrade: buyUpgrade, owns: owns, roomInst: roomInst, hire: hire, candidates: candidates, staffList: staffList, assignNext: assignNext, letGo: letGo, pcTap: pcTap, pcGo: pcGo, pcRows: pcRows, jobChip: jobChip, handLine: handLine,
-      SYMPTOMS: SYMPTOMS, CHECKS: CHECKS, symptomOf: symptomOf, diagnosing: diagnosing, candList: candList, consistent: consistent, checksFor: checksFor, checkAt: checkAt, doCheck: doCheck, nameFault: nameFault, jobLabel: jobLabel,
+      SYMPTOMS: SYMPTOMS, CHECKS: CHECKS, symptomOf: symptomOf, diagnosing: diagnosing, candList: candList, consistent: consistent, checksFor: checksFor, checkAt: checkAt, doCheck: doCheck, nameFault: nameFault, jobLabel: jobLabel, hall2Clash: hall2Clash, markerTarget: markerTarget,
       car: function (b) { return carIn(b || 0); }, LIFTS: LIFTS, liftWorld: liftWorld, liftCar: liftCar, liftUse: liftUse, liftPrompt: liftPrompt, getIn: getIn, getOut: getOut, canDrive: canDrive, carHeight: carHeight, drive: function () { return G.drive; }, customer: function (b) { return customerIn(b || 0); }, job: function (b) { return jobAt(b || 0); }, van: function () { return G.van; }, carPrompt: carPrompt, customerPrompt: customerPrompt, drawJobCard: drawJobCard };
   };
   CO.boot(GAME);

@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.3 (2026-10-12): Workshop Update
+
+**Parts go down by the car.**
+- You carry the parts from the rack to the car, and the moment you start working on it they go down on the floor beside it, so your hands are free for the work. Each part leaves the floor at the step that fits it: the bulb going in, the battery dropping in, the oil being poured.
+- What you do carry sits smaller and lower in the corner of your view.
+
+**A marker shows what to do next.**
+- A bobbing amber arrow and a glowing outline mark the next thing to do: the customer when there is a job to take or a payment waiting, the parts rack, the tool on the wall when a step needs one you are not holding, the exact place on the car for each step (and each check while you find the fault), the lift's control box and the tyre corner.
+- It follows the car you are working on, shows through the car body, and steps aside while a worker has the car or you are driving.
+
+**The lock-up stays where you put it.**
+- With the side door left open, the building could jump back to where it first stood, so the parked cars outside clipped into its walls and the furniture inside sat in the wrong places. It now stays where it was placed, open door or not.
+
+**The second hall is finished.** 
+- All four walls inside are plastered now, the front wall and the wall to the lock-up as well, with the roll door and the side door left open in them. Three framed windows sit high in the back wall, inside and out.
+
+**The office.** 
+- Real glass you can see the PC through instead of a white panel, in both glass walls, with frames and a proper door frame. Inside, a filing cabinet, a chair, a clock on the wall and a plant.
+
+**The parts store.**
+- Labelled bins along the top shelf, coloured shelf edges, a PARTS STORE sign, and a stack of tyres at the end.
+
+**Bay 2's working side.** 
+- A workbench with a cork board and a red tool chest along the east wall, an oil drum by the back wall and a SAFETY FIRST notice above it.
+
+**The waiting corner.**
+- A low table with magazines, a plant and a WAITING AREA sign beside the chairs and the coffee machine.
+
+**Nothing stands inside the new hall.** 
+- A tree, lamp post or fence placed in the editor where the second hall goes is put away when the garage grows, instead of standing in the middle of bay 2 and through the roof.
+
+**Out front.**
+- Bay 2 has both of its lines now, and both bays have their number painted at the end.
+- The roll door of bay 2 has its side rails and its chain, like the first.
+
+**Under the hood.**
+- Co Engine v0.13.1.
+
 ## 0.3.2 (2026-10-12): The Diagnosis Update
 
 - **Find the fault.** What the customer says at the desk is a symptom now, not the job. "It struggles to start in the mornings" could be a worn-out battery, a loose battery terminal or worn spark plugs. A symptom that could be more than one thing opens as a job to find the fault; one that can only be one thing is named at the desk as before.

@@ -79,6 +79,8 @@ module.exports = `
   // level 5: the builders come at closing time
   T.devCommand('level'); T.devCommand('level'); ok(S.level === 5 && S.stage === 1, 'level 5: still the lock-up until tonight');
   T.setTime(17.999); T.run(0.5); ok(S.stage === 2 && T.G.grewAt > 0, 'at closing the garage grows: stage ' + S.stage);
-  ok(Object.keys(S.layout).some((k) => S.layout[k].hidden), 'whatever stood where the new hall goes is cleared: ' + Object.keys(S.layout).filter((k) => S.layout[k].hidden).length + ' props');
+  { const o = T.LO(), H = T.HALL2, inside = Object.keys(T.propInst).filter((id) => { if (id === 'officeDesk' || (S.layout[id] && S.layout[id].hidden)) return false; const P = T.propPlacement(id); return P.x > o.x + H.x0 && P.x < o.x + H.x1 && P.z > o.z + H.z0 && P.z < o.z + H.z1; });
+    ok(inside.length === 0, 'nothing placed stands where the new hall goes: ' + (inside.join(', ') || 'clear') + ' (' + Object.keys(S.layout).filter((k) => S.layout[k].hidden).length + ' put away)'); }
+  S.hdoors = S.hdoors || {}; S.hdoors.side = { open: true, locked: false };   // saved with the side door open: the next scenario checks the lock-up keeps its key
   T.saveNow();
 `;
