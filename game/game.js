@@ -5,7 +5,7 @@
   // The engine parts come first in the closure, the game's parts after. The engine declares the names both sides share
   // here, unassigned, and fills them when the game calls CO.setup (the renderer, the scene, the palette) and CO.boot (the
   // state, the shell, the frame loop). A game part may use any of them at its top level once CO.setup has run.
-  var CO = { version: '0.13.1', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
+  var CO = { version: '0.13.2', cfg: null, game: null, root: null, flash: 0, ready: false, paused: false, stepOnce: false, editor: null };
   var S, SET, SAVE, SETTINGS_KEY, BOOT_SLOT, BOOT_SAVE;               // 40-state fills these
   var canvas, renderer, scene, camera;                                 // 10-three fills these in CO.setup
   var player = null, focus = null, hudDirty = true;                    // 42-player owns player and focus; the HUD throttle flag is read everywhere
@@ -2023,6 +2023,28 @@
   // The catalogue kind is the engine's. Buttons in a panel carry data-act and data-arg; the engine takes the catalogue's restore
   // and buy, the game takes the rest in CO.game.panelAct(act, arg). Tabs carry data-tab.
   var panel = { kind: null, tab: null };
+  var panelDrag = null;
+  function panelPositionLoad() {
+    try { var p = JSON.parse(localStorage.getItem('co-panel-position') || 'null'); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) { document.documentElement.style.setProperty('--panel-left', p.x + 'px'); document.documentElement.style.setProperty('--panel-top', p.y + 'px'); } } catch (e) {}
+  }
+  function panelDragStart(e) {
+    if (!e || e.button !== 0 || e.target.closest('button, input, select, textarea, a')) return;
+    var el = $('dc-panel'), r = el && el.getBoundingClientRect(); if (!r) return;
+    panelDrag = { dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - (r.top + r.height / 2) };
+    el.style.transform = 'translate(-50%, -50%)'; el.classList.add('dragging');
+    e.preventDefault();
+  }
+  function panelDragMove(e) {
+    if (!panelDrag) return;
+    var el = $('dc-panel'); if (!el) return;
+    var w = el.offsetWidth, h = el.offsetHeight, x = Math.max(w / 2 + 8, Math.min(window.innerWidth - w / 2 - 8, e.clientX - panelDrag.dx)), y = Math.max(h / 2 + 8, Math.min(window.innerHeight - h / 2 - 8, e.clientY - panelDrag.dy));
+    document.documentElement.style.setProperty('--panel-left', x + 'px'); document.documentElement.style.setProperty('--panel-top', y + 'px');
+  }
+  function panelDragEnd() {
+    if (!panelDrag) return; panelDrag = null;
+    var el = $('dc-panel'); if (el) el.classList.remove('dragging');
+    try { var r = el.getBoundingClientRect(); localStorage.setItem('co-panel-position', JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 })); } catch (e) {}
+  }
   function openPanel(kind, tab) {
     panel.kind = kind; panel.tab = tab || null; ui.panelOpen = true; var el = $('dc-panel'); if (el) el.hidden = false; if (ui.scanOpen && CO.game && CO.game.scanToggle) CO.game.scanToggle(false);
     ui.suppressMenu = true; try { document.exitPointerLock(); } catch (e) {}
@@ -2031,6 +2053,7 @@
   function closePanel() { if (!ui.panelOpen) return; ui.panelOpen = false; var el = $('dc-panel'); if (el) el.hidden = true; panel.kind = null; hudDirty = true; lockPointer(); }
   function renderPanel() {
     if (!ui.panelOpen) return;
+    panelPositionLoad();
     var spec = panel.kind === 'catalogue' ? { title: 'Catalogue · build mode', tabs: [], body: catalogueHtml() } : (CO.game && CO.game.panel ? CO.game.panel(panel.kind, panel.tab) : null);
     if (!spec && panel.kind === 'npc') spec = npcPanelSpec();   /* part 47: an NPC's words and choices */
     if (!spec) spec = uiPanelSpec(panel.kind);   /* a panel the editor's UI tab described */
@@ -2138,7 +2161,12 @@
   function coSetupShell() {
     menusPageReady();   // part 46
     var pc = $('dc-panel-close'); if (pc) pc.addEventListener('click', closePanel);
-    var pn = $('dc-panel'); if (pn) pn.addEventListener('click', function (e) { var tb = e.target.closest('[data-tab]'); if (tb) { panel.tab = tb.getAttribute('data-tab'); renderPanel(); sfx('click'); return; } var b = e.target.closest('[data-act]'); if (!b || b.disabled) return; panelAct(b.getAttribute('data-act'), b.getAttribute('data-arg')); });
+    var pn = $('dc-panel'); if (pn) {
+      panelPositionLoad();
+      var ph = pn.querySelector('header'); if (ph && !ph.__coPanelDrag) { ph.__coPanelDrag = true; ph.addEventListener('pointerdown', panelDragStart); }
+      if (!window.__coPanelDragBound) { window.__coPanelDragBound = true; window.addEventListener('pointermove', panelDragMove); window.addEventListener('pointerup', panelDragEnd); window.addEventListener('pointercancel', panelDragEnd); }
+      pn.addEventListener('click', function (e) { var tb = e.target.closest('[data-tab]'); if (tb) { panel.tab = tb.getAttribute('data-tab'); renderPanel(); sfx('click'); return; } var b = e.target.closest('[data-act]'); if (!b || b.disabled) return; panelAct(b.getAttribute('data-act'), b.getAttribute('data-arg')); });
+    }
     var mn = $('dc-menu'); if (mn) mn.addEventListener('click', function (e) { var b = e.target.closest('[data-menu]'); if (!b) return; menuAct(b.getAttribute('data-menu'), b); });
     var mb = $('dc-menu-body'); if (mb) mb.addEventListener('input', function (e) { settingInput(e.target); });
   }
@@ -3395,6 +3423,41 @@
     if (!r.ok) return { error: 'the parts did not build: ' + r.error };
     return { ok: true, model: model, code: r.code, stats: stats, mats: modelMatList(model) };
   }
+  // ── The made-with splash ─────────────────────────────────────────
+  // template's index.html) so it is on screen from the first paint, before any script has run, ahead of the game's own splash
+  // or start screen. This part plays it: it fills in the version line, holds the screen for a beat once the boot is done, or
+  // gives it up the moment a click or a key arrives, fades it out, and fires the 'co-splash-end' hooks. A game whose own splash
+  // script sits outside the closure (a menu.js) waits on window.coSplashWait(fn), which also answers at once when the page
+  // mounts no #co-splash at all — so the games this part predates are left exactly as they were.
+  var coSplash = document.getElementById('co-splash'), coSplashWaits = [];
+  var coSplashDone = false;
+  function coSplashFast() {   // a flagged reload skips the brand beat: a slot switch, a save import, 'start over', a quit to the menu — and the editor's viewport
+    try { var p = CO.save && CO.save.prefix; if (p && (sessionStorage.getItem(p + '-skip-splash') === '1' || sessionStorage.getItem(p + '-autoplay') === '1')) return true; } catch (e) {}
+    return /[?&]editor=1/.test(location.search);
+  }
+  function coSplashEnd() {
+    if (coSplashDone) return;
+    coSplashDone = true;
+    window.removeEventListener('click', coSplashEnd, true);
+    window.removeEventListener('keydown', coSplashEnd, true);
+    if (coSplash) {
+      if (coSplashFast()) { if (coSplash.parentNode) coSplash.parentNode.removeChild(coSplash); }
+      else { coSplash.classList.add('co-splash-out'); setTimeout(function () { if (coSplash.parentNode) coSplash.parentNode.removeChild(coSplash); }, 600); }
+    }
+    runHooks('co-splash-end', null);
+    while (coSplashWaits.length) setTimeout(coSplashWaits.pop(), 0);
+  }
+  function coSplashWait(fn) { if (typeof fn !== 'function') return; if (coSplashDone) setTimeout(fn, 0); else coSplashWaits.push(fn); }
+  window.coSplashWait = coSplashWait;
+  if (coSplash) {
+    var coSplashVer = coSplash.querySelector('.co-splash-ver');
+    if (coSplashVer) coSplashVer.textContent = 'v' + CO.version;
+    var coSplashAuthor = coSplash.querySelector('.co-splash-author');
+    if (coSplashAuthor) coSplashAuthor.textContent = 'by TheCodingDad';
+    window.addEventListener('click', coSplashEnd, true);
+    window.addEventListener('keydown', coSplashEnd, true);   // any click or key hands the screen back early
+  }
+  hook('boot', function () { if (coSplash && !coSplashDone) setTimeout(coSplashEnd, coSplashFast() ? 0 : 700); });
   // ── Boot ──────────────────────────────────────────────────────────
   // The game's last part calls CO.boot(GAME). GAME carries the hooks (they merge into CO.game) and these steps, every one optional:
   //   freshState()             the game's default S              migrate(s, fresh)      its save migrations

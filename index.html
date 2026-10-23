@@ -40,9 +40,28 @@
   .dc-sub { color: var(--muted); }
   table.dc-table { width: 100%; border-collapse: collapse; } table.dc-table td, table.dc-table th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); } table.dc-table th { color: var(--muted); font-weight: normal; }
   [hidden] { display: none !important; }
+  /* the made-with splash (Co Engine 89-splash): styles stay self-contained so any game's index.html takes the block as it is */
+  #co-splash { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #0b0f14; transition: opacity 0.5s ease; pointer-events: none; }
+  #co-splash.co-splash-out { opacity: 0; }
+  #co-splash svg { width: 128px; height: 128px; }
+  #co-splash .co-splash-made, #co-splash .co-splash-word, #co-splash .co-splash-sub { font-family: Bahnschrift, "Segoe UI", Arial, sans-serif; }
+  #co-splash .co-splash-made { color: #a0acb8; font-size: 13px; line-height: 1.4; letter-spacing: 6px; text-indent: 6px; }
+  #co-splash .co-splash-word { color: #eef1f5; font-size: 34px; font-weight: 700; line-height: 1.1; letter-spacing: 3px; }
+  #co-splash .co-splash-sub { color: #7f8b97; font-size: 12px; line-height: 1.4; }
 </style>
 </head>
 <body>
+<!-- The made-with splash: the engine's brand screen, on screen from the first paint, before the start screen (Co Engine 89-splash) -->
+<div id="co-splash">
+  <svg viewBox="0 0 128 128" aria-hidden="true">
+    <rect x="12" y="12" width="104" height="104" rx="30" fill="#121a24" stroke="rgba(245,181,61,0.5)" stroke-width="4"></rect>
+    <circle cx="64" cy="66" r="33" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="10" stroke-dasharray="10 9.4" stroke-linecap="round"></circle>
+    <text x="64" y="79" text-anchor="middle" font-family="Bahnschrift, 'Segoe UI', Arial, sans-serif" font-size="42" font-weight="700" fill="#f5b53d">CO</text>
+  </svg>
+  <div class="co-splash-made">MADE WITH</div>
+  <div class="co-splash-word">CO ENGINE</div>
+  <div class="co-splash-sub"><span class="co-splash-ver">v</span> · <span class="co-splash-author">by TheCodingDad</span></div>
+</div>
 <canvas id="co-canvas"></canvas>
 <div id="dc-start" class="dc-overlay dim" data-co-menus style="visibility:hidden"><div class="card">
   <h1>Garage <span>Co.</span></h1><div class="dc-sub">First-person car workshop</div>
